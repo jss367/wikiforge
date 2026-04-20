@@ -69,10 +69,14 @@ case "${1:-compiled}" in
     echo "  RAW notes:     http://localhost:8080"
     echo "  COMPILED wiki: http://localhost:8081"
     echo ""
-    (cd "$QUARTZ" && node ./quartz/bootstrap-cli.mjs build --serve --port 8080 -d "$VAULT") &
+    # `exec` inside each subshell replaces the subshell with node, so the
+    # captured PID is node itself. Without exec, $! points at the subshell
+    # and pkill -P would kill node but orphan its grandchildren (esbuild,
+    # watchers) when the subshell dies.
+    (cd "$QUARTZ" && exec node ./quartz/bootstrap-cli.mjs build --serve --port 8080 -d "$VAULT") &
     RAW_PID=$!
     sleep 2
-    (cd "$QUARTZ" && node ./quartz/bootstrap-cli.mjs build --serve --port 8081 -d "$VAULT/wiki") &
+    (cd "$QUARTZ" && exec node ./quartz/bootstrap-cli.mjs build --serve --port 8081 -d "$VAULT/wiki") &
     COMPILED_PID=$!
     trap "kill_subtree $RAW_PID; kill_subtree $COMPILED_PID; exit 130" INT TERM
     wait
