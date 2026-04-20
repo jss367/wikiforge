@@ -39,11 +39,10 @@ export const defaultContentPageLayout: PageLayout = {
     }),
     Component.Explorer(),
   ],
-  right: [
-    Component.Graph(),
-    Component.DesktopOnly(Component.TableOfContents()),
-    Component.Backlinks(),
-  ],
+  // Wikipedia-style: no right sidebar. TOC and backlinks removed for a
+  // simpler article-centric layout. If you miss the graph/backlinks, move
+  // them to `left:` or restore selective components here.
+  right: [],
 }
 
 // components for pages that display lists of pages  (e.g. tags or folders)
