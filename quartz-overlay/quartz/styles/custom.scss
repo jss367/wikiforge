@@ -1,0 +1,47 @@
+@use "./base.scss";
+
+// Wikipedia-style polish applied on top of Quartz's theme.
+// The primary link color lives in quartz.config.ts (lightMode.secondary = #0645ad).
+// All colors below are theme-aware: Quartz's own CSS variables automatically
+// flip on dark/light toggle, and the one custom variable (--visited) is
+// declared separately for each theme below.
+
+:root[saved-theme="light"] {
+  // Wikipedia's visited-link purple, readable on a white page.
+  --visited: #0b0080;
+}
+
+:root[saved-theme="dark"] {
+  // Soft lavender chosen to read well against Quartz's dark background
+  // (#161618) while still being visually distinct from the blue of --secondary.
+  --visited: #b7a6ff;
+}
+
+// Visited internal links in article content get the theme-aware purple so
+// readers can tell where they've been. Scoped to the center column so
+// sidebar nav stays consistent.
+.page > #quartz-body .center a:visited {
+  color: var(--visited);
+}
+
+// Bottom border under the article title (H1), Wikipedia-style.
+.page-header .article-title {
+  border-bottom: 1px solid var(--lightgray);
+  padding-bottom: 0.17em;
+  margin-bottom: 0.5em;
+}
+
+// Bottom border under every section heading (H2) inside the article body.
+article h2 {
+  border-bottom: 1px solid var(--lightgray);
+  padding-bottom: 0.17em;
+  margin-top: 1em;
+}
+
+// Subtle gray on code block background. --lightgray picks up the right
+// shade in both light and dark modes, so github-light and github-dark
+// syntax themes both stay readable.
+pre,
+pre > code {
+  background-color: var(--lightgray);
+}
