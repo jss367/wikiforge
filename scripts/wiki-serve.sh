@@ -24,20 +24,37 @@ if [ ! -d "$VAULT" ]; then
   exit 1
 fi
 
+# Force-kill a node process and its children (esbuild, etc.) on Ctrl+C.
+# Quartz's serve mode catches SIGINT but does not actually exit — the file
+# watcher keeps the event loop alive. `exec` to forward signals is not
+# enough; we need a bash trap that issues SIGKILL to the whole subtree so
+# the port is released immediately.
+kill_subtree() {
+  local pid=$1
+  # Kill direct children (esbuild, workers) first, then the parent. Use
+  # numeric signal `-9` — it's portable across macOS/Linux pkill variants.
+  pkill -9 -P "$pid" 2>/dev/null
+  kill -9 "$pid" 2>/dev/null
+}
+
+run_quartz() {
+  local port=$1
+  local content_dir=$2
+  cd "$QUARTZ" || exit 1
+  node ./quartz/bootstrap-cli.mjs build --serve --port "$port" -d "$content_dir" &
+  local pid=$!
+  trap "kill_subtree $pid; exit 130" INT TERM
+  wait "$pid"
+}
+
 serve_raw() {
   echo "Starting RAW notes wiki at http://localhost:8080"
-  # Invoke the local Quartz entry point directly via node. `npx quartz` can
-  # silently resolve to a cached copy under ~/.npm/_npx/, which does NOT have
-  # our quartz-overlay applied — content looks correct (it reads from -d) but
-  # layout and components come from the cached version. Calling local
-  # bootstrap-cli.mjs guarantees the overlay is used. `exec` keeps Ctrl+C
-  # forwarding cleanly to node.
-  cd "$QUARTZ" && exec node ./quartz/bootstrap-cli.mjs build --serve --port 8080 -d "$VAULT"
+  run_quartz 8080 "$VAULT"
 }
 
 serve_compiled() {
   echo "Starting COMPILED wiki at http://localhost:8081"
-  cd "$QUARTZ" && exec node ./quartz/bootstrap-cli.mjs build --serve --port 8081 -d "$VAULT/wiki"
+  run_quartz 8081 "$VAULT/wiki"
 }
 
 case "${1:-compiled}" in
@@ -52,12 +69,12 @@ case "${1:-compiled}" in
     echo "  RAW notes:     http://localhost:8080"
     echo "  COMPILED wiki: http://localhost:8081"
     echo ""
-    serve_raw &
+    (cd "$QUARTZ" && node ./quartz/bootstrap-cli.mjs build --serve --port 8080 -d "$VAULT") &
     RAW_PID=$!
     sleep 2
-    serve_compiled &
+    (cd "$QUARTZ" && node ./quartz/bootstrap-cli.mjs build --serve --port 8081 -d "$VAULT/wiki") &
     COMPILED_PID=$!
-    trap "kill $RAW_PID $COMPILED_PID 2>/dev/null" EXIT
+    trap "kill_subtree $RAW_PID; kill_subtree $COMPILED_PID; exit 130" INT TERM
     wait
     ;;
   *)
