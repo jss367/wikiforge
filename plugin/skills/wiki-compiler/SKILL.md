@@ -1,0 +1,375 @@
+---
+name: wiki-compiler
+description: Core compilation algorithm for the LLM Wiki Compiler. Reads source files from configured directories and compiles them into topic-based wiki articles. Supports both knowledge mode (markdown files) and codebase mode (code repositories). Called by /wiki-compile command.
+---
+
+# Wiki Compiler — Compilation Algorithm
+
+This skill contains the 5-phase algorithm for compiling source files into a topic-based wiki.
+
+**Safety rule:** NEVER modify any file outside the configured output directory. Source files are read-only.
+
+## Prerequisites
+
+Before running, read `.wiki-compiler.json` from the project root to get:
+- `mode` — "knowledge" (default, markdown files) or "codebase" (code repository)
+- `sources[]` — directories to scan (with optional `exclude` patterns)
+- `output` — where to write wiki articles
+- `name` — project/domain name for the wiki
+- `topic_hints[]` — optional seed topics from the user
+- `link_style` — "obsidian" (default) or "markdown"
+
+**Codebase mode additional config:**
+- `service_discovery` — "auto" (detect monorepo vs single project) or "manual"
+- `knowledge_files[]` — glob patterns for priority documentation files (README.md, CLAUDE.md, etc.)
+- `deep_scan` — `false` (default) or `true` (also read key source files for richer articles)
+- `code_extensions[]` — file extensions to consider as source code (e.g., `.ts`, `.py`, `.go`)
+
+## Phase 1: Scan Sources
+
+### Knowledge mode (default)
+
+1. For each entry in `sources[]`, list all `.md` files using Glob
+2. Exclude any paths matching `exclude` patterns (e.g., the `wiki/` output directory itself)
+3. Read `.compile-state.json` from the output directory
+4. Compare file list against previous state to identify new or changed files
+5. On first run (no prior state), treat ALL files as new
+
+### Phase 1b: Image inventory
+
+Also scan source directories for image files (`.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp`). Record the full inventory — these will be presented to the LLM during topic compilation (Phase 3) so relevant figures can be embedded. Images that end up referenced in compiled articles are copied into `{output}/images/{topic-slug}/` in Phase 3b, preserving source subpath for disambiguation (e.g., `images/gradient-routing/spike-v3/runs/grmoe/samples/step_0040000.png`).
+
+Exclude image directories the user wouldn't want surfaced (configured via `exclude` in `sources[]`).
+
+### Codebase mode
+
+1. For each entry in `sources[]`, scan for **knowledge files** matching `knowledge_files[]` patterns:
+   - Documentation: `README.md`, `CLAUDE.md`, `AGENTS.md`, `ARCHITECTURE.md`, `CONTRIBUTING.md`
+   - API contracts: `*.proto`, `*.graphql`, `openapi.yaml`, `openapi.json`
+   - Decision records: `ADR-*.md`, `docs/adr/*.md`
+   - Infrastructure: `docker-compose.yml`, `Dockerfile`, `k8s/*.yaml`
+   - Operations: `docs/runbooks/*.md`, `CHANGELOG.md`, `.env.example`
+2. If `deep_scan` is `true`, also scan for key source files per topic area:
+   - Entry points: `index.ts`, `main.py`, `main.go`, `lib.rs`, `App.swift`, etc.
+   - Type definitions: `types.ts`, `models.py`, `schema.prisma`, `*.proto`
+   - Config files: `package.json`, `tsconfig.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`
+   - Limit to ~20 source files per topic area to control token cost
+3. Exclude: `node_modules/`, `dist/`, `.git/`, `vendor/`, `__pycache__/`, `.build/`, `target/`, and configured `exclude` patterns
+4. Read `.compile-state.json` and compare to identify new or changed files
+5. On first run, treat ALL discovered files as new
+
+## Phase 2: Classify and Discover Topics
+
+### Knowledge mode (default)
+
+1. For each source file, read its:
+   - File path (directory structure is a strong signal)
+   - Title (first `#` heading)
+   - First 500 characters of content
+2. Classify each file into one or more topics based on content signals
+3. **Use `topic_hints` from config** as seed topics when available
+4. **Prefer existing topic slugs** from `.compile-state.json` — avoid creating near-duplicates
+5. A single file CAN belong to multiple topics
+6. Files that don't match any topic: group them — if 3+ unclassified files share a theme, create a new topic
+7. Topic slugs should be lowercase-kebab-case (e.g., `d1-retention`, `push-notifications`)
+
+**Topic detection guidance:**
+- Use directory names as strong signals (files in `retention/` likely belong to a retention topic)
+- Use headings and key terms in content as secondary signals
+- Meeting notes and session histories often belong to multiple topics
+- Team memory files (gotchas, decisions, dead-ends) contain entries for many topics — classify by scanning content
+
+### Codebase mode
+
+Topic discovery uses a 3-pass approach: structure → knowledge → optional deep scan.
+
+**Pass 1 — Structure scan (automatic topic discovery):**
+
+1. Detect project type by looking for manifest files in the root:
+   - `package.json` → Node.js/JavaScript/TypeScript
+   - `go.mod` → Go
+   - `Cargo.toml` → Rust
+   - `pyproject.toml` / `requirements.txt` / `setup.py` → Python
+   - `Gemfile` → Ruby
+   - `*.sln` / `*.csproj` → .NET
+   - `Package.swift` → Swift
+   - `pom.xml` / `build.gradle` → Java/Kotlin
+
+2. Detect monorepo vs single project:
+   - **Monorepo/microservices:** Multiple directories each containing their own manifest file (e.g., `services/auth/package.json`, `services/billing/package.json`). Each service directory = a topic.
+   - **Single project:** One manifest at root. Use top-level directory structure as topic boundaries (e.g., `src/auth/`, `src/api/`, `src/models/` each become topics).
+
+3. Auto-create cross-cutting topics when relevant files exist:
+   - `infrastructure` — if `docker-compose.yml`, `Dockerfile`, `k8s/`, `.github/workflows/` exist
+   - `testing` — if `tests/`, `__tests__/`, `spec/`, `test/` directories exist
+   - `deployment` — if CI/CD configs, Dockerfile, deployment scripts exist
+
+**Pass 2 — Knowledge file scan (primary sources):**
+
+For each topic area discovered in Pass 1:
+1. Find all knowledge files (from `knowledge_files[]` config) within that topic's directory
+2. Read each knowledge file's content — these are the primary sources for compilation
+3. A knowledge file CAN belong to multiple topics (e.g., root `README.md` touches all topics)
+4. Root-level knowledge files (`./README.md`, `./CLAUDE.md`, `./ARCHITECTURE.md`) contribute to ALL topics or get their own `project-overview` topic
+
+**Pass 3 — Deep scan (optional, when `deep_scan: true`):**
+
+For each topic area, also read key source files to enrich understanding:
+1. **Entry points:** `index.ts`, `main.py`, `main.go`, `lib.rs`, `App.swift`, `app.py`
+2. **Type definitions:** `types.ts`, `models.py`, `schema.prisma`, `*.proto`, `types.go`
+3. **Route/API definitions:** `routes.ts`, `api.py`, `handlers.go`, `controller.ts`
+4. **Config:** `package.json` (dependencies), `tsconfig.json`, language-specific config
+5. Limit to ~20 files per topic to control token cost
+6. These supplement knowledge files — they add implementation detail to the article's Architecture, API Surface, and Data sections
+
+**Classification output** is identical to knowledge mode: topic slug → list of source files. The rest of the pipeline (Phases 3-5) runs unchanged.
+
+**Topic slug conventions for codebases:**
+- Service names: `auth-service`, `billing-service`, `notification-service`
+- Module names: `auth`, `api-routes`, `data-layer`, `ui-components`
+- Cross-cutting: `infrastructure`, `testing`, `deployment`, `shared-utils`
+
+**Article template:** When `mode` is `codebase`, use `${CLAUDE_PLUGIN_ROOT}/templates/codebase-article-template.md` as the fallback template (instead of the default knowledge template). If `article_sections` is set in config, use those sections (same as knowledge mode).
+
+## Phase 3: Compile Topic Hub Articles
+
+For EACH topic that has new or changed source files:
+
+1. Read ALL source files classified under that topic (need full context, not just changed files)
+2. Write the topic **hub article** to `{output}/topics/{topic-slug}.md`
+3. **Determine article structure:**
+   - If `.wiki-compiler.json` has an `article_sections` array: use those sections in order. Each section's `description` field tells you what content belongs there.
+   - If `article_sections` is absent: fall back to `${CLAUDE_PLUGIN_ROOT}/templates/article-template.md`
+4. Fill every section with specific, factual content — no placeholders
+5. **Lead** is a Wikipedia-style 1-3 paragraph intro. No preamble; start with the topic name bolded and its definition.
+6. **Sources** lists every source file that contributed, using the configured link style
+
+### Writing rules for hub articles (enforce during compilation)
+
+1. **No coverage tags** in section headings. Don't write `[coverage: high -- 5 sources]` or any variation. If coverage tracking is useful downstream, it lives in frontmatter metadata only, invisible to readers.
+2. **No academic parenthetical citations.** Don't write `(Cloud et al., arxiv 2410.04332)` or `(Author, 2024)`. If citing a paper: either link to a paper note via `[[papers/{slug}]]` or use a clean markdown link to the external URL. Never inline the author-year parenthetical.
+3. **Inline wikilinks everywhere.** Every mention of a sub-topic, experiment, decision, person, paper, organization, or concept that has its own source file or compiled sub-page must be an Obsidian `[[wikilink]]` in prose, not just listed in Sources. Wikipedia-dense linking.
+4. **Hub sections are SHORT.** 2-4 paragraphs per section, not detail walls. When a section has a dedicated sub-article (from Phase 3a), end the section with a hatnote: `> **Main article:** [[topics/{topic}/{sub-slug}|Display name]]`.
+5. **Encyclopedic tone.** Descriptive, present tense, third person. No "I", no "we". No temporal words in headings or titles (`New`, `Recent`, `Current`, `Latest`) — these go stale.
+6. **Embed images** when source material includes relevant figures. Reference images at `../images/{topic-slug}/{filename}` (Phase 3b handles the copy). At least one image per article when any exist in source material.
+7. **Frontmatter source field.** Include `source: {relative path from vault root}` pointing to the single best primary source note. This drives the "Edit in Obsidian" link rendered by Quartz.
+
+### Link style
+- `obsidian`: Use `[[relative/path/to/file]]` (without .md extension)
+- `markdown`: Use `[filename](relative/path/to/file.md)`
+
+Relative paths from the `topics/` directory to the source file. For files in the vault root: `[[../../filename]]`. For sub-pages under this topic: `[[{topic-slug}/{sub-slug}]]`.
+
+**Parallel compilation:** When possible, compile multiple topic articles in parallel using subagents. Each subagent gets one topic + its source files + the image inventory. This significantly speeds up first-run compilation.
+
+**IMPORTANT — Sequencing:** Parallel dispatch is ONLY for Phase 3 (topic hub articles). After ALL parallel agents have returned, the PARENT process MUST continue to Phase 3a (sub-article compilation), then 3b (image copy), then 3.5 (concepts), 3.7 (schema), 4 (INDEX), 5 (state + log). Do NOT end the compilation after Phase 3.
+
+## Phase 3a: Compile Sub-Articles (Hub-and-Spoke)
+
+After the hub article for a topic is compiled, identify natural **sub-topic clusters** within the topic's source files and compile a sub-article for each. Sub-articles live at `{output}/topics/{topic-slug}/{sub-slug}.md`.
+
+### Identifying sub-articles
+
+A sub-article should exist for each coherent, substantial unit in the source material. Natural candidates:
+- Individual named experiments (e.g., a `spike-v3/` directory, a `flux-klein-v01-design.md` file)
+- Individual decision records (`decisions/*.md` — one sub-page per decision)
+- Individual concept notes (`concepts/*.md` — one sub-page per concept)
+- Named tracks / workstreams (a group of related files covering one research track)
+
+Merge related files into one sub-article when they're clearly variants of the same thing (e.g., `nand-routing-spike-v4-design.md` and `nand-routing-spike-v4_1-design.md` → one `spike-v4` sub-page). Don't force a sub-article for every tiny file; one-paragraph stubs should be linked inline from the hub instead.
+
+Target: 5–15 sub-articles per topic depending on topic size. If a topic has fewer than ~5 source files, sub-articles may not be warranted; link source files directly from the hub.
+
+### Writing sub-articles
+
+1. Use the sub-article template at `${CLAUDE_PLUGIN_ROOT}/templates/sub-article-template.md`
+2. A sub-article is a **polished, consolidated, Wikipedia-style rewrite** of the source cluster — not a summary, not a copy. Preserve all technical content: numbers, tables, code blocks, results.
+3. Same writing rules as hub articles (no coverage tags, no academic parentheticals, inline wikilinks, encyclopedic tone, embed images).
+4. Link back to the parent topic via `[[topics/{parent-topic}]]` in the lead.
+5. Link sibling sub-pages when referenced: `[[topics/{parent}/{sibling-slug}]]`.
+6. Frontmatter must include `topic`, `sub_page`, `source` (primary source path for Edit button), and `sources` (list of all contributing paths).
+
+### Updating the hub
+
+After sub-articles are compiled, update the hub article's frontmatter `sub_pages: []` with the list of sub-slugs, and ensure every sub-article is referenced somewhere in the hub prose (via wikilink or hatnote).
+
+## Phase 3b: Copy referenced images into wiki/images/
+
+After hub + sub-articles are compiled for a topic:
+
+1. Parse all image references in the compiled markdown (both hub and sub-articles)
+2. For each referenced image, locate the original in the source directory inventory from Phase 1b
+3. Copy the original to `{output}/images/{topic-slug}/{preserved-subpath}/{filename}`
+4. Verify the reference path in the compiled articles matches the copied location
+
+Never modify source images. Copy only; don't move or symlink (Quartz needs real files for its build).
+
+If a referenced image can't be found in the inventory, log a warning and leave the reference in place (the broken image makes the gap visible rather than hiding it).
+
+**Link style:**
+- `obsidian`: Use `[[relative/path/to/file]]` (without .md extension)
+- `markdown`: Use `[filename](relative/path/to/file.md)`
+
+Relative paths should be from the `topics/` directory to the source file.
+
+**Parallel compilation:** When possible, compile multiple topic articles in parallel using subagents. Each subagent gets one topic + its source files. This significantly speeds up first-run compilation.
+
+**IMPORTANT — Sequencing:** Parallel dispatch is ONLY for Phase 3 (topic article compilation). After ALL parallel agents have returned and all topic articles are written, the PARENT process MUST continue to Phase 3.5 (concept discovery). Do NOT end the compilation after Phase 3. The remaining phases (3.5, 3.7, 4, 5) run sequentially in the parent process after parallel compilation completes.
+
+## Phase 3.5: Discover and Compile Concept Articles
+
+**This phase MUST run after Phase 3 completes.** Read the topic articles that were just compiled and look for cross-cutting patterns. These become **concept articles** -- stored in `{output}/concepts/`.
+
+**How to discover concepts:**
+
+1. Read all topic articles that were just compiled (or all if first run)
+2. Look for patterns that appear in 3+ topic articles:
+   - **Recurring decisions** -- the same tradeoff appearing in different contexts (e.g., "speed vs quality" showing up in retention decisions, push notification strategy, and experiment design)
+   - **Relationship patterns** -- a person, team, or stakeholder who appears across multiple topics with consistent dynamics
+   - **Methodology evolution** -- how an approach changed over time across topics (e.g., "how we measure retention" evolving from n-day to bracket)
+   - **Recurring failures** -- the same type of mistake across different domains (e.g., "trusting aggregated data without checking raw events")
+3. Check `schema.md` for existing concepts -- prefer updating existing concept articles over creating new ones
+4. Only create a concept if it genuinely connects 3+ topics with a non-obvious insight. Don't force concepts.
+
+**Concept article format:**
+
+Write to `{output}/concepts/{concept-slug}.md`:
+
+```markdown
+---
+concept: {Concept Name}
+last_compiled: {YYYY-MM-DD}
+topics_connected: [{topic1}, {topic2}, {topic3}]
+status: active
+---
+
+# {Concept Name}
+
+## Pattern
+{1-2 paragraphs describing the cross-cutting pattern. What keeps recurring and why.}
+
+## Instances
+{Each time this pattern appeared, with dates and context}
+- **{date}** in [[../topics/{topic}]]: {what happened}
+- **{date}** in [[../topics/{topic}]]: {what happened}
+
+## What This Means
+{Synthesis -- what the pattern tells you about your work, decisions, or blind spots.
+This is the "so what" that Farzapedia calls the writer's job.}
+
+## Sources
+- [[../topics/{topic1}]]
+- [[../topics/{topic2}]]
+```
+
+**Important:** Concept articles are interpretive, not just factual. They answer "what does this pattern mean?" not just "what happened?" This is what makes them useful for strategic and creative thinking.
+
+**Create the concepts/ directory** if it doesn't exist.
+
+## Phase 3.7: Generate or Update Schema
+
+If `{output}/schema.md` does not exist (first run):
+1. Generate it from `${CLAUDE_PLUGIN_ROOT}/templates/schema-template.md`
+2. Fill in the Topics section AND Concepts section with all discovered slugs and descriptions
+3. Add an Evolution Log entry: "{today's date}: Initial schema generated from {N} topics, {N} concepts"
+
+If `{output}/schema.md` already exists:
+1. Read it BEFORE Phase 2 (classification) -- use its topic list, concept list, and naming conventions
+2. After Phase 3.5 (concepts), check for new topics and concepts not in the schema
+3. Add any new topics/concepts to the schema
+4. Add an Evolution Log entry if anything was added: "{today's date}: Added {slug} -- {reason}"
+5. Never remove topics or concepts from schema without human approval -- flag them as candidates instead
+
+The schema is the source of truth for wiki structure. The human can edit it between compiles to rename topics, merge them, or change conventions. The compiler respects those changes.
+
+## Phase 4: Update INDEX.md
+
+Write to `{output}/INDEX.md`:
+
+```markdown
+# {name} Knowledge Base
+
+Last compiled: {today's date}
+Total topics: {count} | Total sources: {unique file count}
+
+## Topics
+
+| Topic | Also Known As | Sources | Last Updated | Status |
+|-------|--------------|---------|-------------|--------|
+| [[topics/{slug}]] | {keyword aliases} | {count} | {date} | active |
+
+## Concepts
+
+| Concept | Connects | Last Updated |
+|---------|----------|-------------|
+| [[concepts/{slug}]] | {topic1}, {topic2}, {topic3} | {date} |
+
+## Recent Changes
+- {date}: {what changed in this compilation run}
+```
+
+**Keyword aliases:** For each topic, include alternate names, abbreviations, and related terms that someone might search for. For example, a topic called `side-quest-ideas` might have aliases "FitOS, Growth OS, Paperclip, ClawShip". These help `/wiki-search` and Claude find the right topic even when the user uses different terminology.
+
+**Concepts section:** List all concept articles with the topics they connect. If no concepts exist yet, omit this section.
+
+Always regenerate INDEX.md, even if no topics changed (it's cheap).
+
+## Phase 5: Update State and Log
+
+1. **Log** — Append to `{output}/log.md`:
+```markdown
+## {today's date}
+
+**Topics updated:** {list}
+**New topics:** {list or "none"}
+**Sources scanned:** {count}
+**Sources changed:** {count}
+```
+
+2. **Compile state** — Update `{output}/.compile-state.json`:
+```json
+{
+  "last_compiled": "{today's date}",
+  "topics": ["{slug1}", "{slug2}", ...],
+  "source_locations": ["{path1}", "{path2}", ...],
+  "total_sources_scanned": {count}
+}
+```
+
+## Phase 6: Generate CONTEXT.md (codebase mode only, first run)
+
+On the **first compile** (no prior `.compile-state.json`), generate `{output}/CONTEXT.md`:
+
+```markdown
+# Codebase Wiki — Navigation Guide
+
+This project has a compiled knowledge wiki. Use it instead of scanning raw files.
+
+## How to use this wiki
+
+1. Start at INDEX.md — scan the topic table to find relevant modules
+2. Read 1-3 topic hub articles relevant to your current task
+3. Follow sub-article links for detail when the hub section has a `**Main article:**` hatnote
+4. Check concepts/ for cross-cutting patterns (auth strategy, error handling, etc.)
+5. Only read raw source files when you need code-level detail
+
+## When NOT to use the wiki
+- Writing new code (read the actual source files for exact syntax/types)
+- Debugging a specific function (go to the file directly)
+
+## Stats
+Compiled: {date} | Topics: {N} | Sources: {M} | Auto-updates on session start
+```
+
+On subsequent compiles, update the Stats line in CONTEXT.md.
+
+After generating CONTEXT.md, **ask the user** (don't auto-modify): "Want me to add a reference to `wiki/CONTEXT.md` in your CLAUDE.md? This helps the agent discover the wiki automatically."
+
+## Output
+
+After compilation, show a summary to the user:
+- Topics created/updated (with article line counts)
+- Total sources scanned
+- Any files that couldn't be classified
+- Any suggested new topics for next run
+- Time taken

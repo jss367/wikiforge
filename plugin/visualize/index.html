@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wiki Knowledge Graph</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Nothing Design Tokens */
+    --surface-base: #111111;
+    --surface-raised: #1A1A1A;
+    --text-display: #FFFFFF;
+    --text-primary: #E8E8E8;
+    --text-secondary: #999999;
+    --text-disabled: #666666;
+    --border-subtle: #222222;
+    --border-visible: #333333;
+    --interactive: #5B9BF6;
+    --success: #4A9E5C;
+    --warning: #D4A843;
+
+    --font-body: 'Space Grotesk', -apple-system, system-ui, sans-serif;
+    --font-mono: 'Space Mono', 'SF Mono', monospace;
+    --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--surface-base);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+  canvas { display:block; position:absolute; top:0; left:0; }
+
+  /* HUD */
+  .hud {
+    position: fixed;
+    z-index: 10;
+    background: rgba(17,17,17,0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    padding: 14px 18px;
+    pointer-events: auto;
+  }
+  .hud-stats { top: 20px; left: 20px; }
+  .hud-stats h1 {
+    font-family: var(--font-body);
+    font-size: 15px; font-weight: 500; margin-bottom: 4px;
+    color: var(--text-display);
+    letter-spacing: -0.01em;
+  }
+  .hud-stats .meta {
+    font-family: var(--font-mono);
+    font-size: 11px; color: var(--text-disabled);
+    letter-spacing: 0.08em;
+  }
+
+  .hud-search { top: 20px; right: 20px; }
+  .hud-search input {
+    font-family: var(--font-body);
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: var(--text-primary);
+    font-size: 13px; font-weight: 400;
+    width: 200px; outline: none;
+    transition: border-color 200ms var(--ease);
+  }
+  .hud-search input::placeholder { color: var(--text-disabled); }
+  .hud-search input:focus { border-color: var(--border-visible); }
+
+  .hud-legend {
+    bottom: 20px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 16px; flex-wrap: wrap; justify-content: center;
+    padding: 10px 20px;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 10px; color: var(--text-disabled);
+    letter-spacing: 0.04em;
+  }
+  .legend-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+  /* Panel */
+  .panel {
+    position: fixed; top: 0; right: 0;
+    width: 440px; height: 100vh;
+    background: rgba(17,17,17,0.96);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-left: 1px solid var(--border-subtle);
+    z-index: 20;
+    transform: translateX(100%);
+    transition: transform 300ms var(--ease);
+    overflow-y: auto;
+    padding: 28px 24px;
+  }
+  .panel.open { transform: translateX(0); }
+  .panel::-webkit-scrollbar { width: 3px; }
+  .panel::-webkit-scrollbar-track { background: transparent; }
+  .panel::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 2px; }
+  .panel-close {
+    position: absolute; top: 16px; right: 16px;
+    background: none; border: none; color: var(--text-disabled);
+    font-size: 18px; cursor: pointer; padding: 4px 8px;
+    border-radius: 6px; transition: all 150ms var(--ease);
+  }
+  .panel-close:hover { color: var(--text-primary); background: rgba(255,255,255,0.04); }
+  .panel h2 {
+    font-family: var(--font-body);
+    font-size: 18px; font-weight: 500; margin-bottom: 4px;
+    padding-right: 36px; letter-spacing: -0.01em;
+    color: var(--text-display);
+  }
+  .panel .panel-meta {
+    font-family: var(--font-mono);
+    font-size: 11px; color: var(--text-disabled); margin-bottom: 24px;
+    letter-spacing: 0.08em;
+  }
+  .panel .section { margin-bottom: 20px; }
+  .panel .section-heading {
+    font-family: var(--font-mono);
+    font-size: 11px; font-weight: 400; color: var(--text-disabled);
+    margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .coverage-badge {
+    font-family: var(--font-mono);
+    font-size: 9px; font-weight: 400; padding: 2px 6px;
+    border-radius: 3px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .coverage-high { background: rgba(74,158,92,0.12); color: var(--success); }
+  .coverage-medium { background: rgba(212,168,67,0.12); color: var(--warning); }
+  .coverage-low { background: rgba(239,68,68,0.1); color: #f87171; }
+  .panel .section-content {
+    font-family: var(--font-body);
+    font-size: 13px; line-height: 1.6; color: var(--text-secondary);
+    font-weight: 400;
+  }
+  .panel .section-content strong {
+    color: var(--text-primary); font-weight: 500;
+  }
+  .panel .section-content code {
+    font-family: var(--font-mono);
+    background: rgba(255,255,255,0.04); padding: 1px 5px;
+    border-radius: 3px; font-size: 11px; color: var(--interactive);
+  }
+  .panel .section-content li { margin-bottom: 5px; }
+  .panel .section-content ul { padding-left: 16px; list-style: none; }
+  .panel .section-content ul li::before {
+    content: ''; display: inline-block;
+    width: 3px; height: 3px; border-radius: 50%;
+    background: var(--text-disabled); margin-right: 8px;
+    vertical-align: middle; position: relative; top: -1px;
+  }
+
+  /* Tooltip */
+  .tooltip {
+    position: fixed; z-index: 30;
+    background: var(--surface-raised);
+    border: 1px solid var(--border-visible);
+    border-radius: 8px;
+    padding: 10px 14px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 150ms var(--ease);
+    max-width: 260px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  }
+  .tooltip.visible { opacity: 1; }
+  .tooltip .tt-name {
+    font-family: var(--font-body);
+    font-weight: 500; color: var(--text-display);
+    margin-bottom: 2px; font-size: 13px;
+  }
+  .tooltip .tt-detail {
+    font-family: var(--font-mono);
+    color: var(--text-disabled); font-size: 10px;
+    letter-spacing: 0.04em;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="graph"></canvas>
+
+<div class="hud hud-stats" id="hudStats">
+  <h1 id="wikiName">Loading...</h1>
+  <div class="meta" id="wikiMeta"></div>
+</div>
+
+<div class="hud hud-search">
+  <input type="text" id="searchInput" placeholder="Search topics..." autocomplete="off">
+</div>
+
+<div class="hud hud-legend" id="legend"></div>
+
+<div class="panel" id="panel">
+  <button class="panel-close" id="panelClose">&times;</button>
+  <h2 id="panelTitle"></h2>
+  <div class="panel-meta" id="panelMeta"></div>
+  <div id="panelContent"></div>
+</div>
+
+<div class="tooltip" id="tooltip">
+  <div class="tt-name" id="ttName"></div>
+  <div class="tt-detail" id="ttDetail"></div>
+</div>
+
+<script>
+const canvas = document.getElementById('graph');
+const ctx = canvas.getContext('2d');
+const tooltip = document.getElementById('tooltip');
+const panel = document.getElementById('panel');
+
+// Muted palette — blue/violet weighted, Nothing-aligned
+const PALETTE = [
+  '#5B9BF6', // interactive blue
+  '#8b5cf6', // violet
+  '#6366f1', // indigo
+  '#06b6d4', // cyan
+  '#4A9E5C', // success green
+  '#D4A843', // warning amber
+  '#ec4899', // pink
+  '#0ea5e9', // sky
+  '#a855f7', // purple
+  '#14b8a6', // teal
+  '#10b981', // emerald
+  '#f43f5e', // rose
+];
+
+// Font strings for canvas
+const FONT_BODY = "'Space Grotesk', -apple-system, system-ui, sans-serif";
+const FONT_MONO = "'Space Mono', 'SF Mono', monospace";
+
+let W, H, centerX, centerY;
+let nodes = [];
+let edges = [];
+let concepts = [];
+let graphData = null;
+let hoveredNode = null;
+let hoveredEdge = null;
+let selectedNode = null;
+let searchQuery = '';
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  centerX = W / 2;
+  centerY = H / 2;
+  if (panel.classList.contains('open')) centerX = (W - 440) / 2;
+  layoutNodes();
+}
+
+// --- Data ---
+
+async function loadData() {
+  const res = await fetch('/api/graph');
+  graphData = await res.json();
+
+  document.getElementById('wikiName').textContent = graphData.name;
+  const topicCount = graphData.topics.length;
+  const sourceCount = graphData.totalSources || 0;
+  const reduction = sourceCount > 0 ? Math.round((1 - topicCount / sourceCount) * 100) : 0;
+  document.getElementById('wikiMeta').textContent =
+    `${topicCount} TOPICS · ${sourceCount} SOURCES · ${reduction}% FEWER FILES`;
+
+  nodes = graphData.topics.map((t, i) => ({
+    slug: t.slug,
+    name: t.name,
+    aliases: t.aliases,
+    sourceCount: t.sourceCount,
+    color: PALETTE[i % PALETTE.length],
+    radius: Math.min(12 + Math.sqrt(t.sourceCount) * 4.5, 48),
+    scale: 1, targetScale: 1,
+    angle: 0, targetDist: 0,
+    x: centerX, y: centerY,
+    targetX: centerX, targetY: centerY
+  }));
+
+  edges = graphData.edges.map(e => ({ from: e.from, to: e.to, concept: e.concept }));
+  concepts = graphData.concepts;
+
+  const legend = document.getElementById('legend');
+  legend.innerHTML = nodes.map(n =>
+    `<div class="legend-item"><div class="legend-dot" style="background:${n.color}"></div>${n.name}</div>`
+  ).join('');
+
+  layoutNodes();
+  animate();
+}
+
+// --- Layout ---
+
+function layoutNodes() {
+  if (!nodes.length) return;
+  const minDist = Math.max(Math.min(W, H) * 0.14, 70);
+  const maxDist = Math.min(W, H) * 0.34;
+
+  const connCount = {};
+  nodes.forEach(n => { connCount[n.slug] = 0; });
+  edges.forEach(e => {
+    if (connCount[e.from] !== undefined) connCount[e.from]++;
+    if (connCount[e.to] !== undefined) connCount[e.to]++;
+  });
+  const maxConn = Math.max(...Object.values(connCount), 1);
+  const angleStep = (2 * Math.PI) / nodes.length;
+
+  nodes.forEach((n, i) => {
+    const conn = connCount[n.slug] || 0;
+    n.targetDist = minDist + (maxDist - minDist) * (1 - conn / maxConn) * 0.65 + minDist * 0.35;
+    n.angle = -Math.PI / 2 + angleStep * i;
+    n.targetX = centerX + Math.cos(n.angle) * n.targetDist;
+    n.targetY = centerY + Math.sin(n.angle) * n.targetDist;
+  });
+}
+
+// --- Render ---
+
+function animate() {
+  ctx.clearRect(0, 0, W, H);
+  drawBackground();
+  drawEdges();
+  drawNodes();
+  drawCenter();
+
+  nodes.forEach(n => {
+    n.x += (n.targetX - n.x) * 0.05;
+    n.y += (n.targetY - n.y) * 0.05;
+    n.scale += (n.targetScale - n.scale) * 0.12;
+  });
+
+  requestAnimationFrame(animate);
+}
+
+function drawBackground() {
+  const grad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, Math.max(W, H) * 0.55);
+  grad.addColorStop(0, '#141414');
+  grad.addColorStop(0.5, '#121212');
+  grad.addColorStop(1, '#111111');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawCenter() {
+  const cGrad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 45);
+  cGrad.addColorStop(0, 'rgba(91,155,246,0.04)');
+  cGrad.addColorStop(1, 'rgba(91,155,246,0)');
+  ctx.fillStyle = cGrad;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, 45, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(91,155,246,0.2)';
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, 2, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawEdges() {
+  edges.forEach((e, idx) => {
+    const fromNode = nodes.find(n => n.slug === e.from);
+    const toNode = nodes.find(n => n.slug === e.to);
+    if (!fromNode || !toNode) return;
+
+    const isDirectHover = hoveredEdge === e;
+    const isNodeHover = hoveredNode && (hoveredNode.slug === e.from || hoveredNode.slug === e.to);
+    const isHighlighted = isDirectHover || isNodeHover;
+    const isSearchDimmed = searchQuery &&
+      !fromNode.name.toLowerCase().includes(searchQuery) &&
+      !toNode.name.toLowerCase().includes(searchQuery);
+
+    ctx.save();
+    ctx.globalAlpha = isSearchDimmed ? 0.02 : (isHighlighted ? 0.35 : 0.05);
+    ctx.strokeStyle = isHighlighted ? '#5B9BF6' : '#5B9BF6';
+    ctx.lineWidth = isHighlighted ? 1.2 : 0.6;
+
+    // Curved edge
+    const mx = (fromNode.x + toNode.x) / 2;
+    const my = (fromNode.y + toNode.y) / 2;
+    const dx = toNode.x - fromNode.x;
+    const dy = toNode.y - fromNode.y;
+    const cpx = mx + dy * 0.12;
+    const cpy = my - dx * 0.12;
+
+    ctx.beginPath();
+    ctx.moveTo(fromNode.x, fromNode.y);
+    ctx.quadraticCurveTo(cpx, cpy, toNode.x, toNode.y);
+    ctx.stroke();
+
+    // Edge label — ONLY for directly hovered edge, not all edges of hovered node
+    if (isDirectHover) {
+      const concept = concepts.find(c => c.slug === e.concept);
+      if (concept) {
+        // Position label at curve midpoint, offset away from nearest node
+        const t = 0.5;
+        const lx = (1-t)*(1-t)*fromNode.x + 2*(1-t)*t*cpx + t*t*toNode.x;
+        const ly = (1-t)*(1-t)*fromNode.y + 2*(1-t)*t*cpy + t*t*toNode.y;
+
+        // Perpendicular offset to avoid overlapping the line
+        const len = Math.sqrt(dx*dx + dy*dy) || 1;
+        const nx = -dy / len * 16;
+        const ny = dx / len * 16;
+        const labelX = lx + nx;
+        const labelY = ly + ny;
+
+        ctx.globalAlpha = 1;
+        ctx.font = `400 10px ${FONT_MONO}`;
+        ctx.textAlign = 'center';
+        const textW = ctx.measureText(concept.name).width;
+
+        // Pill background
+        const px = 8, py = 4;
+        ctx.fillStyle = 'rgba(17,17,17,0.92)';
+        ctx.beginPath();
+        ctx.roundRect(labelX - textW/2 - px, labelY - 7 - py, textW + px*2, 14 + py*2, 4);
+        ctx.fill();
+        ctx.strokeStyle = '#333333';
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+
+        ctx.fillStyle = '#E8E8E8';
+        ctx.fillText(concept.name, labelX, labelY);
+      }
+    }
+    ctx.restore();
+  });
+}
+
+function drawNodes() {
+  const time = Date.now();
+
+  nodes.forEach(n => {
+    const isHovered = hoveredNode === n;
+    const isSelected = selectedNode === n;
+    const isConnected = hoveredNode && edges.some(
+      e => (e.from === hoveredNode.slug && e.to === n.slug) ||
+           (e.to === hoveredNode.slug && e.from === n.slug)
+    );
+    const isSearchMatch = !searchQuery || n.name.toLowerCase().includes(searchQuery) ||
+      (n.aliases && n.aliases.toLowerCase().includes(searchQuery));
+
+    n.targetScale = isHovered ? 1.15 : 1;
+
+    ctx.save();
+
+    if (searchQuery && !isSearchMatch) {
+      ctx.globalAlpha = 0.06;
+    } else if (hoveredNode && !isHovered && !isConnected) {
+      ctx.globalAlpha = 0.2;
+    } else {
+      ctx.globalAlpha = 1;
+    }
+
+    const r = n.radius * n.scale;
+
+    // Outer glow
+    if (isHovered || isSelected) {
+      const glowGrad = ctx.createRadialGradient(n.x, n.y, r, n.x, n.y, r * 1.8);
+      glowGrad.addColorStop(0, hexAlpha(n.color, 0.1));
+      glowGrad.addColorStop(1, hexAlpha(n.color, 0));
+      ctx.fillStyle = glowGrad;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r * 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Node fill — radial gradient (Nothing style: color20 → color06)
+    const fillGrad = ctx.createRadialGradient(n.x - r * 0.15, n.y - r * 0.15, 0, n.x, n.y, r);
+    fillGrad.addColorStop(0, hexAlpha(n.color, 0.22));
+    fillGrad.addColorStop(0.6, hexAlpha(n.color, 0.1));
+    fillGrad.addColorStop(1, hexAlpha(n.color, 0.05));
+    ctx.fillStyle = fillGrad;
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Hairline stroke
+    ctx.strokeStyle = hexAlpha(n.color, isHovered ? 0.6 : 0.3);
+    ctx.lineWidth = isHovered ? 1.5 : 0.8;
+    ctx.stroke();
+
+    // Pulse ring for selected
+    if (isSelected) {
+      const pulseR = r + 4 + Math.sin(time * 0.003) * 3;
+      ctx.strokeStyle = hexAlpha(n.color, 0.15 + Math.sin(time * 0.003) * 0.08);
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, pulseR, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // --- Labels with dark halo for separation ---
+
+    // Node name label
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = 'rgba(0,0,0,0.9)';
+    if (isHovered || isSelected) {
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = `500 12px ${FONT_BODY}`;
+    } else {
+      ctx.fillStyle = isConnected ? '#E8E8E8' : '#999999';
+      ctx.font = `400 11px ${FONT_BODY}`;
+    }
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(n.name, n.x, n.y + r + 12);
+    ctx.shadowBlur = 0;
+
+    // Source count inside node (Space Mono)
+    if (r > 16) {
+      ctx.fillStyle = isHovered ? '#FFFFFF' : hexAlpha(n.color, 0.65);
+      ctx.font = `${isHovered ? '700' : '400'} ${isHovered ? '12' : '10'}px ${FONT_MONO}`;
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'center';
+      ctx.fillText(n.sourceCount, n.x, n.y);
+    }
+
+    // Spoke to center
+    ctx.globalAlpha *= 0.025;
+    ctx.strokeStyle = hexAlpha(n.color, 0.25);
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(centerX, centerY);
+    ctx.lineTo(n.x, n.y);
+    ctx.stroke();
+
+    ctx.restore();
+  });
+}
+
+function hexAlpha(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// --- Interaction ---
+
+canvas.addEventListener('mousemove', (e) => {
+  const mx = e.clientX, my = e.clientY;
+  let found = null;
+  let foundEdge = null;
+
+  for (const n of nodes) {
+    const dist = Math.sqrt((mx - n.x) ** 2 + (my - n.y) ** 2);
+    if (dist < n.radius * n.scale + 10) { found = n; break; }
+  }
+
+  if (!found) {
+    // Find closest edge midpoint within threshold
+    let minDist = 35;
+    for (const edge of edges) {
+      const fromN = nodes.find(n => n.slug === edge.from);
+      const toN = nodes.find(n => n.slug === edge.to);
+      if (!fromN || !toN) continue;
+      const emx = (fromN.x + toN.x) / 2;
+      const emy = (fromN.y + toN.y) / 2;
+      const dist = Math.sqrt((mx - emx) ** 2 + (my - emy) ** 2);
+      if (dist < minDist) { minDist = dist; foundEdge = edge; }
+    }
+  }
+
+  hoveredNode = found;
+  hoveredEdge = found ? null : foundEdge; // Node takes priority
+  canvas.style.cursor = (found || foundEdge) ? 'pointer' : 'default';
+
+  if (found) {
+    document.getElementById('ttName').textContent = found.name;
+    document.getElementById('ttDetail').textContent =
+      `${found.sourceCount} sources · click to read`;
+    tooltip.style.left = (mx + 16) + 'px';
+    tooltip.style.top = (my - 10) + 'px';
+    tooltip.classList.add('visible');
+  } else if (foundEdge) {
+    const concept = concepts.find(c => c.slug === foundEdge.concept);
+    document.getElementById('ttName').textContent = concept ? concept.name : foundEdge.concept;
+    document.getElementById('ttDetail').textContent = 'click to read concept';
+    tooltip.style.left = (mx + 16) + 'px';
+    tooltip.style.top = (my - 10) + 'px';
+    tooltip.classList.add('visible');
+  } else {
+    tooltip.classList.remove('visible');
+  }
+});
+
+canvas.addEventListener('click', async () => {
+  if (hoveredNode) {
+    selectedNode = hoveredNode;
+    await openArticle('topic', hoveredNode.slug);
+  } else if (hoveredEdge) {
+    await openArticle('concept', hoveredEdge.concept);
+  } else if (panel.classList.contains('open')) {
+    closePanel();
+  }
+});
+
+// --- Panel ---
+
+async function openArticle(type, slug) {
+  const res = await fetch(`/api/${type}/${slug}`);
+  if (!res.ok) return;
+  const article = await res.json();
+
+  document.getElementById('panelTitle').textContent = article.title;
+  document.getElementById('panelMeta').textContent =
+    `${article.meta.source_count || '?'} SOURCES · ${article.meta.last_compiled || ''}`;
+
+  const content = document.getElementById('panelContent');
+  content.innerHTML = article.sections.map(s => {
+    const coverageMatch = s.heading.match(/\[coverage:\s*(high|medium|low)\s*--\s*(\d+)\s*sources?\]/i);
+    let badge = '';
+    let heading = s.heading;
+    if (coverageMatch) {
+      const level = coverageMatch[1].toLowerCase();
+      badge = `<span class="coverage-badge coverage-${level}">${level}</span>`;
+      heading = s.heading.replace(/\[coverage:.*?\]/i, '').trim();
+    }
+    return `
+      <div class="section">
+        <div class="section-heading">${heading} ${badge}</div>
+        <div class="section-content">${markdownToHtml(s.content)}</div>
+      </div>`;
+  }).join('');
+
+  panel.classList.add('open');
+  centerX = (W - 440) / 2;
+  layoutNodes();
+}
+
+function closePanel() {
+  panel.classList.remove('open');
+  selectedNode = null;
+  centerX = W / 2;
+  layoutNodes();
+}
+
+document.getElementById('panelClose').addEventListener('click', closePanel);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && panel.classList.contains('open')) closePanel();
+});
+
+// --- Markdown → HTML ---
+
+function markdownToHtml(md) {
+  return md
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^- \*\*(.+?)\*\*\s*\((.+?)\)\s*[—–-]\s*(.+)$/gm, '<li><strong>$1</strong> ($2) — $3</li>')
+    .replace(/^- \*\*(.+?)\*\*\s*[—–-]\s*(.+)$/gm, '<li><strong>$1</strong> — $2</li>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>[\s\S]*?<\/li>)/g, (m) => `<ul>${m}</ul>`)
+    .replace(/<\/ul>\s*<ul>/g, '')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="#" style="color:#5B9BF6;text-decoration:none">$1</a>')
+    .replace(/\n\n/g, '<br><br>')
+    .replace(/\n/g, '<br>');
+}
+
+// --- Search ---
+document.getElementById('searchInput').addEventListener('input', (e) => {
+  searchQuery = e.target.value.toLowerCase();
+});
+
+// --- Init ---
+window.addEventListener('resize', resize);
+resize();
+loadData();
+</script>
+</body>
+</html>
