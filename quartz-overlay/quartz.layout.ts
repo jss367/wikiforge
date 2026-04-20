@@ -46,8 +46,19 @@ export const defaultContentPageLayout: PageLayout = {
 }
 
 // components for pages that display lists of pages  (e.g. tags or folders)
+// Quartz uses this layout when a content file has a matching directory —
+// e.g. `topics/gradient-routing.md` is rendered with this layout because
+// the folder `topics/gradient-routing/` also exists. So our topic hubs
+// render here, not in defaultContentPageLayout. EditInObsidian is included
+// to cover that case; on tag/folder index pages without a `source`
+// frontmatter field, the component returns null and renders nothing.
 export const defaultListPageLayout: PageLayout = {
-  beforeBody: [Component.Breadcrumbs(), Component.ArticleTitle(), Component.ContentMeta()],
+  beforeBody: [
+    Component.Breadcrumbs(),
+    Component.ArticleTitle(),
+    Component.ContentMeta(),
+    EditInObsidian(),
+  ],
   left: [
     Component.PageTitle(),
     Component.MobileOnly(Component.Spacer()),
