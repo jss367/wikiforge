@@ -26,12 +26,15 @@ fi
 
 serve_raw() {
   echo "Starting RAW notes wiki at http://localhost:8080"
-  cd "$QUARTZ" && npx quartz build --serve --port 8080 -d "$VAULT"
+  # `exec` replaces the bash process with npx so Ctrl+C goes directly to the
+  # node child; without it, `npm exec` / `npx` does not forward signals
+  # reliably and the node server survives as a zombie bound to the port.
+  cd "$QUARTZ" && exec npx quartz build --serve --port 8080 -d "$VAULT"
 }
 
 serve_compiled() {
   echo "Starting COMPILED wiki at http://localhost:8081"
-  cd "$QUARTZ" && npx quartz build --serve --port 8081 -d "$VAULT/wiki"
+  cd "$QUARTZ" && exec npx quartz build --serve --port 8081 -d "$VAULT/wiki"
 }
 
 case "${1:-compiled}" in
