@@ -26,15 +26,18 @@ fi
 
 serve_raw() {
   echo "Starting RAW notes wiki at http://localhost:8080"
-  # `exec` replaces the bash process with npx so Ctrl+C goes directly to the
-  # node child; without it, `npm exec` / `npx` does not forward signals
-  # reliably and the node server survives as a zombie bound to the port.
-  cd "$QUARTZ" && exec npx quartz build --serve --port 8080 -d "$VAULT"
+  # Invoke the local Quartz entry point directly via node. `npx quartz` can
+  # silently resolve to a cached copy under ~/.npm/_npx/, which does NOT have
+  # our quartz-overlay applied — content looks correct (it reads from -d) but
+  # layout and components come from the cached version. Calling local
+  # bootstrap-cli.mjs guarantees the overlay is used. `exec` keeps Ctrl+C
+  # forwarding cleanly to node.
+  cd "$QUARTZ" && exec node ./quartz/bootstrap-cli.mjs build --serve --port 8080 -d "$VAULT"
 }
 
 serve_compiled() {
   echo "Starting COMPILED wiki at http://localhost:8081"
-  cd "$QUARTZ" && exec npx quartz build --serve --port 8081 -d "$VAULT/wiki"
+  cd "$QUARTZ" && exec node ./quartz/bootstrap-cli.mjs build --serve --port 8081 -d "$VAULT/wiki"
 }
 
 case "${1:-compiled}" in
