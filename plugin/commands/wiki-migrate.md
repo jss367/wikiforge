@@ -7,7 +7,7 @@ One-time migration command. Analyzes your AGENTS.md or CLAUDE.md session startup
 ### Step 1: Validate
 
 - Read `.wiki-compiler.json` — if not found, tell the user to run `/wiki-init` first
-- Check that the wiki has been compiled at least once (INDEX.md and topic articles exist)
+- Check that the wiki has been compiled at least once (index.md and topic articles exist)
 - If not compiled, tell the user to run `/wiki-compile` first
 
 ### Step 2: Find startup instructions
@@ -25,7 +25,7 @@ Identify the section that lists files to read at session start. Look for pattern
 ### Step 3: Map raw files to wiki topics
 
 For each file listed in the startup sequence:
-1. Read the wiki INDEX.md to get the list of topics
+1. Read the wiki index.md to get the list of topics
 2. For each raw file, check if its content is covered by a wiki topic:
    - Match by filename appearing in a topic's Sources section
    - Match by content overlap (the raw file's key terms appearing in a topic article)
@@ -54,7 +54,7 @@ Estimated token savings: ~{old_tokens} → ~{new_tokens} ({reduction}% reduction
 ### Step 5: Generate replacement startup block
 
 Based on the report, generate a replacement startup section that:
-1. Reads wiki INDEX.md first
+1. Reads wiki index.md first
 2. Lists relevant topic articles by work area
 3. Keeps any ❌ items as direct file reads (operational rules, checklists)
 4. Includes coverage-based fallback instructions

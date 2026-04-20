@@ -15,7 +15,7 @@ Search across all wiki articles for keywords, phrases, or topics.
 Use a two-tier search approach:
 
 **Tier 1 — Index scan (fast, try this first):**
-- Read `{output}/INDEX.md`
+- Read `{output}/index.md`
 - Check topic names and one-line summaries for keyword matches
 - This is usually sufficient for "which topic covers X?" questions
 

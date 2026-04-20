@@ -282,9 +282,9 @@ If `{output}/schema.md` already exists:
 
 The schema is the source of truth for wiki structure. The human can edit it between compiles to rename topics, merge them, or change conventions. The compiler respects those changes.
 
-## Phase 4: Update INDEX.md
+## Phase 4: Update index.md
 
-Write to `{output}/INDEX.md`:
+Write to `{output}/index.md`:
 
 ```markdown
 # {name} Knowledge Base
@@ -312,7 +312,7 @@ Total topics: {count} | Total sources: {unique file count}
 
 **Concepts section:** List all concept articles with the topics they connect. If no concepts exist yet, omit this section.
 
-Always regenerate INDEX.md, even if no topics changed (it's cheap).
+Always regenerate index.md, even if no topics changed (it's cheap).
 
 ## Phase 5: Update State and Log
 
@@ -347,7 +347,7 @@ This project has a compiled knowledge wiki. Use it instead of scanning raw files
 
 ## How to use this wiki
 
-1. Start at INDEX.md — scan the topic table to find relevant modules
+1. Start at index.md — scan the topic table to find relevant modules
 2. Read 1-3 topic hub articles relevant to your current task
 3. Follow sub-article links for detail when the hub section has a `**Main article:**` hatnote
 4. Check concepts/ for cross-cutting patterns (auth strategy, error handling, etc.)
