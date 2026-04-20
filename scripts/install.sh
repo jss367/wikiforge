@@ -28,9 +28,9 @@ else
   echo "Quartz already at $QUARTZ — skipping clone."
 fi
 
-# 2. Apply overlay
+# 2. Apply overlay (recursive — handles nested dirs like quartz/components/)
 echo "Applying quartz-overlay/..."
-cp -v "$REPO_ROOT/quartz-overlay/"* "$QUARTZ/"
+rsync -av "$REPO_ROOT/quartz-overlay/" "$QUARTZ/"
 
 # 3. npm install
 echo "Installing Quartz dependencies..."
