@@ -151,7 +151,7 @@ Write `.wiki-compiler.json`:
   Concepts discovered:
   └── {concept1} — {description}
 
-  Browse: wiki/INDEX.md
+  Browse: wiki/index.md
   Navigation guide: wiki/CONTEXT.md
 
 Want me to add a reference to wiki/CONTEXT.md in your CLAUDE.md?
@@ -340,7 +340,7 @@ Wiki initialized for "{name}"
 
 Next steps:
   1. Run /wiki-compile to build your first compilation (5-10 min)
-  2. Open {output_path}/INDEX.md in Obsidian to browse
+  2. Open {output_path}/index.md in Obsidian to browse
   3. After compiling, run /wiki-migrate to switch your AGENTS.md to wiki-first
 
 Edit .wiki-compiler.json anytime to adjust settings.

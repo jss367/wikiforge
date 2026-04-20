@@ -7,7 +7,7 @@ Run health checks on the compiled wiki to find issues.
 1. **Read configuration** from `.wiki-compiler.json`. If not found, tell the user to run `/wiki-init` first.
 
 2. **Read the wiki state:**
-   - Read `{output}/INDEX.md` for current topics
+   - Read `{output}/index.md` for current topics
    - Read `{output}/schema.md` for expected structure (if exists)
    - Read `{output}/.compile-state.json` for last compilation state
 

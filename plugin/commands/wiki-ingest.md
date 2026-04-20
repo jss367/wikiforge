@@ -47,7 +47,7 @@ If a new topic was proposed and approved in Step 3:
 ### Step 5: Update schema, index, and state
 
 1. **Schema** — If a new topic was created, add it to `{output}/schema.md` with an evolution log entry: "{date}: Added {slug} — discovered during ingest of {filename}"
-2. **INDEX.md** — Regenerate with updated source counts and dates
+2. **index.md** — Regenerate with updated source counts and dates
 3. **Log** — Append to `{output}/compile-log.md`:
    ```
    ## {date} — ingest

@@ -123,7 +123,7 @@ function parseSections(body) {
 // --- Data Loading ---
 
 function loadGraph() {
-  const indexPath = path.join(wikiDir, 'INDEX.md');
+  const indexPath = path.join(wikiDir, 'index.md');
   if (!fs.existsSync(indexPath)) return { name: 'Unknown', topics: [], concepts: [], edges: [] };
 
   const indexContent = fs.readFileSync(indexPath, 'utf8');

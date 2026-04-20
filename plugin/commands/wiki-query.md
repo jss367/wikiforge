@@ -10,7 +10,7 @@ The user's question is passed as `$ARGUMENTS`. Example: `/wiki-query what do we 
 
 1. **Read configuration** from `.wiki-compiler.json`. If not found, tell user to run `/wiki-init`.
 
-2. **Read INDEX.md** from the configured output directory to see all available topics.
+2. **Read index.md** from the configured output directory to see all available topics.
 
 3. **Read schema.md** if it exists -- check for cross-reference rules that might point to related topics.
 
@@ -43,7 +43,7 @@ The user's question is passed as `$ARGUMENTS`. Example: `/wiki-query what do we 
 
 ## If no wiki exists
 
-If INDEX.md doesn't exist or the wiki hasn't been compiled yet:
+If index.md doesn't exist or the wiki hasn't been compiled yet:
 ```
 Wiki not compiled yet. Run /wiki-compile first, then try your query again.
 ```
