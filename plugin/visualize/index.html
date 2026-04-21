@@ -162,6 +162,260 @@
     vertical-align: middle; position: relative; top: -1px;
   }
 
+  /* Export button */
+  .hud-export { top: 68px; right: 20px; padding: 0; }
+  .hud-export button {
+    font-family: var(--font-mono);
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 10px 16px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 150ms var(--ease);
+  }
+  .hud-export button:hover {
+    border-color: var(--border-visible);
+    background: rgba(255,255,255,0.06);
+    color: var(--text-display);
+  }
+  .hud-export button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .hud-export button:disabled:hover {
+    border-color: var(--border-subtle);
+    background: rgba(255,255,255,0.03);
+    color: var(--text-primary);
+  }
+
+  /* Export modal */
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 40;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: 14px;
+    width: 100%;
+    max-width: 560px;
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+  }
+  .modal-header { padding: 24px 24px 12px; }
+  .modal h2 {
+    font-family: var(--font-body);
+    font-size: 18px; font-weight: 500;
+    color: var(--text-display);
+    margin-bottom: 6px;
+    letter-spacing: -0.01em;
+    padding-right: 36px;
+  }
+  .modal-desc {
+    font-family: var(--font-body);
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+  .modal-close {
+    position: absolute; top: 16px; right: 16px;
+    background: none; border: none; color: var(--text-disabled);
+    font-size: 20px; cursor: pointer; padding: 4px 8px;
+    border-radius: 6px; transition: all 150ms var(--ease);
+  }
+  .modal-close:hover { color: var(--text-primary); background: rgba(255,255,255,0.04); }
+  .modal-controls {
+    display: flex; gap: 8px;
+    padding: 0 24px 12px;
+  }
+  .modal-btn-small {
+    font-family: var(--font-mono);
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 150ms var(--ease);
+  }
+  .modal-btn-small:hover { border-color: var(--border-visible); color: var(--text-primary); }
+  .modal-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 24px;
+    min-height: 120px;
+  }
+  .modal-list::-webkit-scrollbar { width: 4px; }
+  .modal-list::-webkit-scrollbar-track { background: transparent; }
+  .modal-list::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 2px; }
+  .modal-loading {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-disabled);
+    letter-spacing: 0.08em;
+    text-align: center;
+    padding: 32px 0;
+  }
+  .export-article {
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 10px 0;
+  }
+  .export-article:last-child { border-bottom: none; }
+  .export-article-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    padding: 4px 0;
+    user-select: none;
+  }
+  .export-article-toggle {
+    font-family: var(--font-mono);
+    color: var(--text-disabled);
+    font-size: 10px;
+    width: 10px;
+    display: inline-block;
+    transition: transform 150ms var(--ease);
+  }
+  .export-article.open > .export-article-header .export-article-toggle {
+    transform: rotate(90deg);
+  }
+  .export-article-type {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-disabled);
+    padding: 2px 6px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 3px;
+  }
+  .export-article-name {
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--text-primary);
+    flex: 1;
+  }
+  .export-article-count {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-disabled);
+    letter-spacing: 0.04em;
+  }
+  .export-sections {
+    display: none;
+    padding: 6px 0 4px 34px;
+  }
+  .export-article.open > .export-sections { display: block; }
+  .export-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 0;
+    font-family: var(--font-body);
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .export-section-empty {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-disabled);
+    padding: 4px 0;
+    letter-spacing: 0.04em;
+  }
+  .export-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border: 1px solid var(--border-visible);
+    border-radius: 3px;
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+    transition: all 150ms var(--ease);
+  }
+  .export-checkbox:checked {
+    background: var(--interactive);
+    border-color: var(--interactive);
+  }
+  .export-checkbox:checked::after {
+    content: '';
+    position: absolute;
+    left: 3px;
+    top: 0px;
+    width: 5px;
+    height: 9px;
+    border: solid white;
+    border-width: 0 1.5px 1.5px 0;
+    transform: rotate(45deg);
+  }
+  .export-checkbox:indeterminate {
+    background: var(--interactive);
+    border-color: var(--interactive);
+  }
+  .export-checkbox:indeterminate::after {
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: 5px;
+    width: 8px;
+    height: 2px;
+    background: white;
+  }
+  .modal-footer {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    padding: 16px 24px 20px;
+    border-top: 1px solid var(--border-subtle);
+    margin-top: 12px;
+  }
+  .modal-btn {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 1px solid var(--border-subtle);
+    background: transparent;
+    color: var(--text-secondary);
+    transition: all 150ms var(--ease);
+  }
+  .modal-btn:hover { border-color: var(--border-visible); color: var(--text-primary); }
+  .modal-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .modal-btn-primary {
+    background: var(--interactive);
+    border-color: var(--interactive);
+    color: #0b1220;
+    font-weight: 700;
+  }
+  .modal-btn-primary:hover {
+    background: #79b1ff;
+    border-color: #79b1ff;
+    color: #0b1220;
+  }
+
   /* Tooltip */
   .tooltip {
     position: fixed; z-index: 30;
@@ -210,12 +464,40 @@
   <div id="panelContent"></div>
 </div>
 
+<div class="hud hud-export" id="hudExport">
+  <button id="exportBtn" disabled title="Loading...">Export</button>
+</div>
+
+<div class="modal-overlay" id="exportOverlay">
+  <div class="modal">
+    <button class="modal-close" id="exportClose">&times;</button>
+    <div class="modal-header">
+      <h2>Export wiki</h2>
+      <p class="modal-desc">Pick which subsections to include. The exported file keeps the full interactive graph — only the article bodies are filtered.</p>
+    </div>
+    <div class="modal-controls">
+      <button class="modal-btn-small" id="exportSelectAll">Select all</button>
+      <button class="modal-btn-small" id="exportDeselectAll">Deselect all</button>
+    </div>
+    <div class="modal-list" id="exportList">
+      <div class="modal-loading">Loading articles...</div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn" id="exportCancel">Cancel</button>
+      <button class="modal-btn modal-btn-primary" id="exportConfirm">Export HTML</button>
+    </div>
+  </div>
+</div>
+
 <div class="tooltip" id="tooltip">
   <div class="tt-name" id="ttName"></div>
   <div class="tt-detail" id="ttDetail"></div>
 </div>
 
 <script>
+// When this file is a static export, embedded data replaces server fetches.
+const EXPORT_DATA = (typeof window !== 'undefined' && window.__WIKI_EXPORT__) || null;
+
 const canvas = document.getElementById('graph');
 const ctx = canvas.getContext('2d');
 const tooltip = document.getElementById('tooltip');
@@ -263,8 +545,12 @@ function resize() {
 // --- Data ---
 
 async function loadData() {
-  const res = await fetch('/api/graph');
-  graphData = await res.json();
+  if (EXPORT_DATA) {
+    graphData = EXPORT_DATA.graph;
+  } else {
+    const res = await fetch('/api/graph');
+    graphData = await res.json();
+  }
 
   document.getElementById('wikiName').textContent = graphData.name;
   const topicCount = graphData.topics.length;
@@ -293,6 +579,13 @@ async function loadData() {
   legend.innerHTML = nodes.map(n =>
     `<div class="legend-item"><div class="legend-dot" style="background:${n.color}"></div>${n.name}</div>`
   ).join('');
+
+  // Graph data is loaded — safe to allow exports now.
+  const exportBtnEl = document.getElementById('exportBtn');
+  if (exportBtnEl) {
+    exportBtnEl.disabled = false;
+    exportBtnEl.title = 'Export a shareable HTML of selected sections';
+  }
 
   layoutNodes();
   animate();
@@ -607,15 +900,34 @@ canvas.addEventListener('click', async () => {
 // --- Panel ---
 
 async function openArticle(type, slug) {
-  const res = await fetch(`/api/${type}/${slug}`);
-  if (!res.ok) return;
-  const article = await res.json();
+  let article;
+  if (EXPORT_DATA) {
+    article = EXPORT_DATA.articles[`${type}:${slug}`];
+    if (!article) {
+      document.getElementById('panelTitle').textContent = 'Not included in export';
+      document.getElementById('panelMeta').textContent = `${type.toUpperCase()} · ${slug}`;
+      document.getElementById('panelContent').innerHTML =
+        '<div class="section"><div class="section-content">This article was excluded from the shared export.</div></div>';
+      panel.classList.add('open');
+      centerX = (W - 440) / 2;
+      layoutNodes();
+      return;
+    }
+  } else {
+    const res = await fetch(`/api/${type}/${slug}`);
+    if (!res.ok) return;
+    article = await res.json();
+  }
 
   document.getElementById('panelTitle').textContent = article.title;
   document.getElementById('panelMeta').textContent =
     `${article.meta.source_count || '?'} SOURCES · ${article.meta.last_compiled || ''}`;
 
   const content = document.getElementById('panelContent');
+  if (!article.sections.length) {
+    content.innerHTML =
+      '<div class="section"><div class="section-content" style="color:var(--text-disabled)">All subsections of this article were excluded from the export.</div></div>';
+  } else {
   content.innerHTML = article.sections.map(s => {
     const coverageMatch = s.heading.match(/\[coverage:\s*(high|medium|low)\s*--\s*(\d+)\s*sources?\]/i);
     let badge = '';
@@ -631,6 +943,7 @@ async function openArticle(type, slug) {
         <div class="section-content">${markdownToHtml(s.content)}</div>
       </div>`;
   }).join('');
+  }
 
   panel.classList.add('open');
   centerX = (W - 440) / 2;
@@ -670,6 +983,276 @@ function markdownToHtml(md) {
 document.getElementById('searchInput').addEventListener('input', (e) => {
   searchQuery = e.target.value.toLowerCase();
 });
+
+// --- Export ---
+
+const exportOverlay = document.getElementById('exportOverlay');
+const exportList = document.getElementById('exportList');
+const exportConfirmBtn = document.getElementById('exportConfirm');
+// Cache fetched articles so re-opening the modal is instant.
+const exportArticleCache = {};
+// Selection state: { 'type:slug': { included: bool, sections: bool[] } }
+// `sections` is indexed by section position (0..n-1) rather than heading text
+// because `parseSections` preserves duplicate `##` headings in an article, and
+// keying by heading would collide those entries into one.
+let exportSelection = {};
+// Index→key mapping for the currently-rendered modal list.
+let currentExportRender = { articleKeyById: [] };
+
+async function fetchArticle(type, slug) {
+  const key = `${type}:${slug}`;
+  if (exportArticleCache[key]) return exportArticleCache[key];
+  const res = await fetch(`/api/${type}/${slug}`);
+  if (!res.ok) return null;
+  const art = await res.json();
+  exportArticleCache[key] = art;
+  return art;
+}
+
+async function openExportModal() {
+  exportOverlay.classList.add('open');
+  exportList.innerHTML = '<div class="modal-loading">Loading articles...</div>';
+  exportConfirmBtn.disabled = true;
+
+  const items = [
+    ...(graphData.topics || []).map(t => ({ type: 'topic', slug: t.slug, name: t.name })),
+    ...(graphData.concepts || []).map(c => ({ type: 'concept', slug: c.slug, name: c.name })),
+  ];
+
+  const articles = await Promise.all(items.map(async it => {
+    const art = await fetchArticle(it.type, it.slug);
+    return { ...it, article: art };
+  }));
+
+  // Seed selection state with all sections checked by default, preserving any
+  // prior user choices if they re-open the modal without page refresh.
+  const prior = exportSelection;
+  exportSelection = {};
+  articles.forEach(({ type, slug, article }) => {
+    const key = `${type}:${slug}`;
+    const priorSections = Array.isArray(prior[key]?.sections) ? prior[key].sections : null;
+    const sections = (article?.sections || []).map((_, j) => {
+      return priorSections && priorSections[j] !== undefined ? priorSections[j] : true;
+    });
+    exportSelection[key] = {
+      included: prior[key]?.included !== undefined ? prior[key].included : true,
+      sections,
+    };
+  });
+
+  renderExportList(articles);
+  exportConfirmBtn.disabled = false;
+}
+
+function renderExportList(articles) {
+  if (!articles.length) {
+    exportList.innerHTML = '<div class="modal-loading">No articles found.</div>';
+    return;
+  }
+  // Map raw keys/headings to stable integer ids so we never have to worry
+  // about CSS selector escaping for colons, slashes, or markdown punctuation
+  // in headings.
+  const articleKeyById = [];
+  exportList.innerHTML = articles.map(({ type, slug, name, article }, i) => {
+    const key = `${type}:${slug}`;
+    articleKeyById[i] = key;
+    const sections = article?.sections || [];
+    const checkedCount = sections.filter((_, j) => exportSelection[key].sections[j]).length;
+    const totalCount = sections.length;
+    return `
+      <div class="export-article" data-aid="${i}">
+        <div class="export-article-header">
+          <span class="export-article-toggle">▶</span>
+          <input type="checkbox" class="export-checkbox export-article-check" data-aid="${i}">
+          <span class="export-article-type">${type}</span>
+          <span class="export-article-name">${escapeHtml(name)}</span>
+          <span class="export-article-count" data-aid-count="${i}">${checkedCount}/${totalCount}</span>
+        </div>
+        <div class="export-sections">
+          ${sections.length === 0
+            ? '<div class="export-section-empty">No subsections</div>'
+            : sections.map((s, j) => {
+                const cleanHeading = s.heading.replace(/\[coverage:.*?\]/i, '').trim();
+                const checked = exportSelection[key].sections[j] ? 'checked' : '';
+                return `
+                  <label class="export-section">
+                    <input type="checkbox" class="export-checkbox export-section-check"
+                      data-aid="${i}" data-sid="${j}" ${checked}>
+                    <span>${escapeHtml(cleanHeading)}</span>
+                  </label>`;
+              }).join('')}
+        </div>
+      </div>`;
+  }).join('');
+
+  // Publish the index map before we kick off the initial
+  // `updateArticleCheckboxState` calls below — otherwise those initial calls
+  // look up `currentExportRender.articleKeyById[aid]` against the stale
+  // mapping and silently no-op, leaving article checkboxes unchecked on
+  // first render even when all sections are included.
+  currentExportRender = { articleKeyById };
+
+  // Wire up interactions
+  exportList.querySelectorAll('.export-article-header').forEach(h => {
+    h.addEventListener('click', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      h.parentElement.classList.toggle('open');
+    });
+  });
+  exportList.querySelectorAll('.export-section-check').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const aid = +cb.dataset.aid;
+      const sid = +cb.dataset.sid;
+      const key = articleKeyById[aid];
+      exportSelection[key].sections[sid] = cb.checked;
+      updateArticleCheckboxState(aid);
+    });
+  });
+  exportList.querySelectorAll('.export-article-check').forEach(cb => {
+    const aid = +cb.dataset.aid;
+    updateArticleCheckboxState(aid);
+    cb.addEventListener('change', () => {
+      const key = articleKeyById[aid];
+      const sel = exportSelection[key];
+      const newState = cb.checked;
+      for (let j = 0; j < sel.sections.length; j++) sel.sections[j] = newState;
+      sel.included = newState;
+      exportList.querySelectorAll(`.export-section-check[data-aid="${aid}"]`)
+        .forEach(x => { x.checked = newState; });
+      updateArticleCheckboxState(aid);
+    });
+  });
+}
+
+function updateArticleCheckboxState(aid) {
+  const key = currentExportRender.articleKeyById[aid];
+  if (key === undefined) return;
+  const sel = exportSelection[key];
+  const total = sel.sections.length;
+  const checkedCount = sel.sections.filter(Boolean).length;
+  const cb = exportList.querySelector(`.export-article-check[data-aid="${aid}"]`);
+  const counter = exportList.querySelector(`[data-aid-count="${aid}"]`);
+  if (counter) counter.textContent = `${checkedCount}/${total}`;
+  if (!cb) return;
+  if (total === 0) {
+    // No subsections to toggle — mirror the article-level `included` flag so
+    // users can still include/exclude these via the article checkbox.
+    cb.checked = !!sel.included;
+    cb.indeterminate = false;
+    return;
+  }
+  if (checkedCount === 0) {
+    cb.checked = false;
+    cb.indeterminate = false;
+    sel.included = false;
+  } else if (checkedCount === total) {
+    cb.checked = true;
+    cb.indeterminate = false;
+    sel.included = true;
+  } else {
+    cb.checked = false;
+    cb.indeterminate = true;
+    sel.included = true;
+  }
+}
+
+function setAllSelections(state) {
+  Object.keys(exportSelection).forEach(key => {
+    const sel = exportSelection[key];
+    for (let j = 0; j < sel.sections.length; j++) sel.sections[j] = state;
+    sel.included = state;
+  });
+  exportList.querySelectorAll('.export-section-check').forEach(cb => { cb.checked = state; });
+  exportList.querySelectorAll('.export-article-check').forEach(cb => {
+    updateArticleCheckboxState(+cb.dataset.aid);
+  });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function closeExportModal() {
+  exportOverlay.classList.remove('open');
+}
+
+async function runExport() {
+  exportConfirmBtn.disabled = true;
+  const originalLabel = exportConfirmBtn.textContent;
+  exportConfirmBtn.textContent = 'Building...';
+
+  try {
+    const exportData = { graph: graphData, articles: {} };
+
+    for (const [key, sel] of Object.entries(exportSelection)) {
+      if (!sel.included) continue;
+      const [type, slug] = key.split(':');
+      const art = await fetchArticle(type, slug);
+      if (!art) continue;
+      const filtered = {
+        ...art,
+        sections: art.sections.filter((_, j) => sel.sections[j]),
+      };
+      exportData.articles[key] = filtered;
+    }
+
+    // Fetch pristine source HTML to avoid serializing the current DOM state
+    // (open panels, search text, etc.).
+    const srcRes = await fetch(window.location.pathname === '/' ? '/' : '/');
+    let html = await srcRes.text();
+
+    // Safely encode JSON for inline <script> injection.
+    const jsonPayload = JSON.stringify(exportData)
+      .replace(/</g, '\\u003c')
+      .replace(/>/g, '\\u003e')
+      .replace(/&/g, '\\u0026')
+      .replace(/\u2028/g, '\\u2028')
+      .replace(/\u2029/g, '\\u2029');
+
+    // Escape the closing tag so the HTML parser doesn't treat it as the end of
+    // the outer <script> block this code is running inside.
+    const injection = '<script>window.__WIKI_EXPORT__ = ' + jsonPayload + ';<\/script>\n';
+    // Inject just before the first script tag (the app bootstrap).
+    html = html.replace(/<script>/, injection + '<script>');
+
+    const filename = `${(graphData.name || 'wiki').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-export.html`;
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    closeExportModal();
+  } catch (err) {
+    alert('Export failed: ' + (err && err.message ? err.message : err));
+  } finally {
+    exportConfirmBtn.disabled = false;
+    exportConfirmBtn.textContent = originalLabel;
+  }
+}
+
+document.getElementById('exportBtn').addEventListener('click', openExportModal);
+document.getElementById('exportClose').addEventListener('click', closeExportModal);
+document.getElementById('exportCancel').addEventListener('click', closeExportModal);
+document.getElementById('exportSelectAll').addEventListener('click', () => setAllSelections(true));
+document.getElementById('exportDeselectAll').addEventListener('click', () => setAllSelections(false));
+exportConfirmBtn.addEventListener('click', runExport);
+exportOverlay.addEventListener('click', (e) => {
+  if (e.target === exportOverlay) closeExportModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && exportOverlay.classList.contains('open')) closeExportModal();
+});
+
+// In exported mode, strip the export UI — it relies on the server.
+if (EXPORT_DATA) {
+  document.getElementById('hudExport')?.remove();
+  exportOverlay.remove();
+}
 
 // --- Init ---
 window.addEventListener('resize', resize);
