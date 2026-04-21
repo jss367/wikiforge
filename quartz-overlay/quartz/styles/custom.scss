@@ -9,12 +9,16 @@
 :root[saved-theme="light"] {
   // Wikipedia's visited-link purple, readable on a white page.
   --visited: #0b0080;
+  // Wikipedia's redlink red for unresolved [[wikilinks]].
+  --redlink: #ba0000;
 }
 
 :root[saved-theme="dark"] {
   // Soft lavender chosen to read well against Quartz's dark background
   // (#161618) while still being visually distinct from the blue of --secondary.
   --visited: #b7a6ff;
+  // Lighter red so unresolved links stay legible on the dark background.
+  --redlink: #ff6b6b;
 }
 
 // Visited internal links in article content get the theme-aware purple so
@@ -47,16 +51,11 @@ pre > code {
 }
 
 // Wikipedia-style redlinks: unresolved [[wikilinks]] render in red so readers
-// can see where the wiki wants a page that doesn't exist yet. Overrides the
-// stock Quartz 50%-opacity-secondary styling in base.scss.
-:root[saved-theme="light"] {
-  --redlink: #ba0000;
-}
-:root[saved-theme="dark"] {
-  --redlink: #ff6b6b;
-}
-
-a.internal.broken {
+// can see where the wiki wants a page that doesn't exist yet. Scoped to the
+// article center column (mirrors the --visited rule above) so the extra
+// specificity beats base.scss without depending on @use ordering, and sidebar
+// chrome keeps its stock styling.
+.page > #quartz-body .center a.internal.broken {
   color: var(--redlink);
   opacity: 1;
   &:hover {
