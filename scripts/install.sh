@@ -1,13 +1,12 @@
 #!/bin/bash
-# Set up wikiforge on a new machine.
+# First-time setup for wikiforge on a new machine.
 #
-# This script:
-#   1. Clones upstream Quartz into $QUARTZ (default ~/Documents/wiki-quartz)
-#   2. Copies quartz-overlay/ over the stock Quartz files
-#   3. Runs npm install
-#   4. Prints instructions for registering the Claude Code plugin
+# Clones upstream Quartz (if missing), applies the wikiforge overlay, and
+# prints next steps. The overlay apply itself is delegated to sync-overlay.sh
+# so it stays in sync with the runtime path wiki-serve.sh uses.
 #
-# Idempotent — safe to re-run after pulling new changes.
+# Idempotent — safe to re-run. On an existing machine you rarely need to:
+# wiki-serve.sh calls sync-overlay.sh automatically on every serve.
 
 set -e
 
@@ -20,7 +19,7 @@ echo "  repo:   $REPO_ROOT"
 echo "  quartz: $QUARTZ"
 echo ""
 
-# 1. Clone Quartz if missing
+# Clone Quartz if missing.
 if [ ! -d "$QUARTZ" ]; then
   echo "Cloning Quartz into $QUARTZ..."
   git clone "$QUARTZ_REPO" "$QUARTZ"
@@ -28,16 +27,11 @@ else
   echo "Quartz already at $QUARTZ — skipping clone."
 fi
 
-# 2. Apply overlay (recursive — handles nested dirs like quartz/components/).
-# Uses `cp -R` instead of rsync so the script has no dependencies beyond
-# coreutils; safe on minimal Linux images and fresh dev environments.
-echo "Applying quartz-overlay/..."
-cp -Rv "$REPO_ROOT/quartz-overlay/"* "$QUARTZ/"
-
-# 3. npm install
-echo "Installing Quartz dependencies..."
-cd "$QUARTZ"
-npm install
+# Apply the overlay and refresh dependencies. One source of truth for this
+# logic, shared with wiki-serve.sh — sync-overlay.sh runs npm install on a
+# fresh clone (no node_modules) or whenever package.json / package-lock.json
+# drift, so install.sh doesn't need its own dependency step.
+bash "$(dirname "$0")/sync-overlay.sh"
 
 echo ""
 echo "Quartz setup complete."
@@ -52,4 +46,8 @@ echo "     (or however you normally register plugins — consult Claude Code doc
 echo ""
 echo "  3. Serve the compiled wiki:"
 echo "       bash $REPO_ROOT/scripts/wiki-serve.sh compiled"
+echo "     (or /wiki-serve from inside Claude Code)"
+echo ""
+echo "  Future wikiforge updates: just git pull and re-serve. wiki-serve.sh"
+echo "  calls sync-overlay.sh automatically."
 echo ""

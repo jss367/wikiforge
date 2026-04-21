@@ -137,6 +137,11 @@ serve_on_ports() {
   [ -d "$QUARTZ" ] || { echo "Quartz not found at $QUARTZ. Run scripts/install.sh first." >&2; exit 1; }
   [ -d "$vault_path" ] || { echo "Vault path not found: $vault_path" >&2; exit 1; }
 
+  # Bring the Quartz install up to the latest overlay before serving. Idempotent;
+  # a clean run costs only a handful of cmp calls. Propagate a non-zero exit so a
+  # failed sync doesn't silently fall through into the serve path.
+  bash "$(dirname "$0")/sync-overlay.sh" || exit $?
+
   case "$mode" in
     raw)
       echo "Serving RAW notes at http://localhost:$raw_port"
