@@ -83,20 +83,42 @@ The `preferences` list and `topics.<slug>.notes` list are passed verbatim to the
 
 ### Incremental-skip decision (per topic, evaluated before Phase 3)
 
-After classification, for each topic determine whether it needs recompiling:
+For each topic, decide RECOMPILE or SKIP. The decision must invalidate correctly on three independent axes: source-file set changes, source-file content changes, and config changes scoped to this topic.
 
-1. Find the max `mtime` across all source files classified under the topic
-2. Read the compiled hub's `mtime` at `{output}/topics/{slug}.md` (and sub-articles at `{output}/topics/{slug}/*.md` if they exist)
-3. If every source's mtime is older than the compiled hub's mtime, **skip this topic** — no work needed. Report it in the summary as "unchanged, skipped".
-4. If any source is newer, recompile the topic (hub + sub-articles + image copies).
-5. Topics with no compiled hub yet always compile (first-run behavior).
+**State the skip decision needs (stored per topic in `.compile-state.json` from the last compile):**
+- `topics.<slug>.sources`: sorted list of source file paths included last compile
+- `topics.<slug>.config_hash`: hash of the config subtree that influenced this topic last compile — specifically `preferences` (global) + `topics.<slug>` (this topic's entry), including its `sources`, `exclude`, and `notes`
 
-**Exceptions that force a recompile regardless of mtimes:**
-- The user explicitly ran `/wiki-compile --force` or `/wiki-compile --topic <slug>` for this topic
-- Config changed since last compile (detected by `.wiki-compiler.yml` mtime being newer than `.compile-state.json`)
-- Any file in `topics.<slug>.notes` was updated in config since last compile
+**Decision (per topic):**
 
-This rule is important for a vault with many topics: only the ones that actually changed cost LLM tokens to recompile. A quiet day updates zero topics.
+1. **No prior compile?** → RECOMPILE (first-run behavior).
+2. **`--force` or `--topic <slug>` targets this topic?** → RECOMPILE.
+3. **Source-set change?** Compute the current source set (after Phase 2 + per-topic excludes). If it differs from `topics.<slug>.sources` in the prior state — any addition, removal, or rename — → RECOMPILE. This catches deleted or renamed sources that would otherwise leave stale Sources entries.
+4. **Config-scope change?** Compute a fresh hash of `preferences` + `topics.<slug>` from the current config. If it differs from the stored `topics.<slug>.config_hash` → RECOMPILE *this topic only*. A change to one topic's `notes` does not invalidate other topics.
+5. **Source-content change?** For each current source, compare its `mtime` to the compiled hub's `mtime` at `{output}/topics/{slug}.md`. If any source is newer → RECOMPILE.
+6. **None of the above triggered?** → SKIP. Report as "unchanged, skipped".
+
+**Note on global config changes:**
+- A change to `preferences` (the global list) changes every topic's `config_hash` (since each hash includes `preferences`), so it correctly invalidates all topics.
+- A change to a single `topics.<slug>` entry only changes that topic's `config_hash`.
+- Schema-level changes (e.g. `article_sections`, `mode`, `output`) should invalidate all topics — include them in the hash or force a full recompile when they change.
+
+**Persisting the state (in Phase 5):**
+
+After each topic is compiled, update `.compile-state.json`:
+```json
+{
+  "topics": {
+    "gradient-routing": {
+      "sources": ["Gradient Routing/OVERVIEW.md", "..."],
+      "config_hash": "<hash>",
+      "last_compiled": "2026-04-20T12:34:56Z"
+    }
+  }
+}
+```
+
+This rule is important for a vault with many topics: only the ones that actually changed cost LLM tokens to recompile. A quiet day updates zero topics. A source deletion or a single `topics.<slug>.notes` entry only invalidates the one affected topic.
 
 ### Phase 1b: Image inventory
 
@@ -411,15 +433,24 @@ Always regenerate index.md, even if no topics changed (it's cheap).
 **Sources changed:** {count}
 ```
 
-2. **Compile state** — Update `{output}/.compile-state.json`:
+2. **Compile state** — Update `{output}/.compile-state.json`. Per-topic tracking is required for the incremental-skip decision:
 ```json
 {
   "last_compiled": "{today's date}",
-  "topics": ["{slug1}", "{slug2}", ...],
+  "topics": {
+    "{slug1}": {
+      "sources": ["{path1}", "{path2}", ...],
+      "config_hash": "{hash of preferences + topics.slug1 subtree used this compile}",
+      "last_compiled": "{ISO timestamp}"
+    }
+  },
+  "schema_hash": "{hash of schema-level config — article_sections, mode, output, link_style — used this compile}",
   "source_locations": ["{path1}", "{path2}", ...],
   "total_sources_scanned": {count}
 }
 ```
+
+For topics that were skipped in this run, preserve their existing entry unchanged. For topics that recompiled, update `sources`, `config_hash`, and `last_compiled`. For topics no longer present (removed from schema by user), remove their entry.
 
 ## Phase 6: Generate CONTEXT.md (codebase mode only, first run)
 
