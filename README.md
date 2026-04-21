@@ -36,11 +36,29 @@ Compile the wiki from raw notes:
 /wiki-compile
 ```
 
-Serve it locally:
+Serve it locally. First register each vault you want to browse:
+
 ```
-bash scripts/wiki-serve.sh compiled   # compiled wiki on :8081 (default)
-bash scripts/wiki-serve.sh raw        # raw notes on :8080
-bash scripts/wiki-serve.sh both       # both simultaneously
+bash scripts/wiki-serve.sh --add personal ~/Documents/Obsidian\ Vault
+bash scripts/wiki-serve.sh --add work     ~/Documents/WorkVault
+bash scripts/wiki-serve.sh --list
+```
+
+Each vault gets a stable compiled-wiki port (first vault → 8081, next → 8083, …) with raw served at `port - 1`. Then:
+
+```
+bash scripts/wiki-serve.sh personal            # compiled wiki (default mode)
+bash scripts/wiki-serve.sh personal raw        # raw notes
+bash scripts/wiki-serve.sh personal both       # both simultaneously
+```
+
+Run multiple vaults in parallel by opening separate terminals, each serving a different registered vault — ports don't collide because each vault owns its own pair.
+
+Config lives at `~/.config/wikiforge/vaults.json`. Needs `jq` (`brew install jq`).
+
+For a quick one-off without registering, the legacy form still works:
+```
+VAULT=~/Documents/SomeVault bash scripts/wiki-serve.sh compiled
 ```
 
 ## Repo layout
