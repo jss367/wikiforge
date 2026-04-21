@@ -76,7 +76,9 @@ The `preferences` list and `topics.<slug>.notes` list are passed verbatim to the
 
 1. For each entry in `sources[]`, list all `.md` files using Glob
 2. Exclude any paths matching `exclude` patterns (e.g., the `wiki/` output directory itself)
-3. Apply per-topic excludes from `topics.<slug>.exclude` after classification (Phase 2)
+3. After Phase 2 classification, resolve each topic's final source set as follows:
+   - **If `topics.<slug>.sources` is set in config** — this is an explicit override. Use it as the authoritative source list for this topic. Ignore classification for those globs; files matching them belong to this topic regardless of heuristic. Files NOT matching any topic's override are still classified by content.
+   - Then apply `topics.<slug>.exclude` to remove files from that topic even if they matched.
 4. Read `.compile-state.json` from the output directory
 5. Compare file list against previous state to identify new or changed files
 6. On first run (no prior state), treat ALL files as new
@@ -89,14 +91,18 @@ For each topic, decide RECOMPILE or SKIP. The decision must invalidate correctly
 - `topics.<slug>.sources`: sorted list of source file paths included last compile
 - `topics.<slug>.config_hash`: hash of the config subtree that influenced this topic last compile — specifically `preferences` (global) + `topics.<slug>` (this topic's entry), including its `sources`, `exclude`, and `notes`
 
+**Plus one global state field:**
+- `schema_hash`: hash of schema-level fields that affect all topics — `article_sections`, `mode`, `output`, `link_style`, and any other cross-cutting config that changes what every compile emits
+
 **Decision (per topic):**
 
 1. **No prior compile?** → RECOMPILE (first-run behavior).
 2. **`--force` or `--topic <slug>` targets this topic?** → RECOMPILE.
-3. **Source-set change?** Compute the current source set (after Phase 2 + per-topic excludes). If it differs from `topics.<slug>.sources` in the prior state — any addition, removal, or rename — → RECOMPILE. This catches deleted or renamed sources that would otherwise leave stale Sources entries.
-4. **Config-scope change?** Compute a fresh hash of `preferences` + `topics.<slug>` from the current config. If it differs from the stored `topics.<slug>.config_hash` → RECOMPILE *this topic only*. A change to one topic's `notes` does not invalidate other topics.
-5. **Source-content change?** For each current source, compare its `mtime` to the compiled hub's `mtime` at `{output}/topics/{slug}.md`. If any source is newer → RECOMPILE.
-6. **None of the above triggered?** → SKIP. Report as "unchanged, skipped".
+3. **Schema change?** Compute the current `schema_hash` from config. If it differs from the stored `schema_hash` → RECOMPILE (applies to every topic; check this once at the start of the skip pass and, if changed, skip the rest of the skip checks for all topics).
+4. **Source-set change?** Compute the current source set (after Phase 2 + per-topic sources/excludes resolution). If it differs from `topics.<slug>.sources` in the prior state — any addition, removal, or rename — → RECOMPILE. This catches deleted or renamed sources that would otherwise leave stale Sources entries.
+5. **Config-scope change?** Compute a fresh hash of `preferences` + `topics.<slug>` from the current config. If it differs from the stored `topics.<slug>.config_hash` → RECOMPILE *this topic only*. A change to one topic's `notes` does not invalidate other topics.
+6. **Source-content change?** For each current source, compare its `mtime` to the compiled hub's `mtime` at `{output}/topics/{slug}.md`. If any source is newer → RECOMPILE.
+7. **None of the above triggered?** → SKIP. Report as "unchanged, skipped".
 
 **Note on global config changes:**
 - A change to `preferences` (the global list) changes every topic's `config_hash` (since each hash includes `preferences`), so it correctly invalidates all topics.
