@@ -62,6 +62,15 @@ add_vault() {
     echo "Usage: $0 --add <name> <vault-path>" >&2
     exit 1
   fi
+  # Reject names that collide with legacy mode keywords or flag syntax —
+  # otherwise `wiki-serve.sh <name>` would hit the legacy path and silently
+  # ignore the registered vault.
+  case "$name" in
+    raw|compiled|both|-*)
+      echo "Reserved name: '$name' collides with mode keywords or flag syntax. Pick a different name." >&2
+      exit 1
+      ;;
+  esac
   [ -d "$path" ] || { echo "Path not found: $path" >&2; exit 1; }
   path="$(cd "$path" && pwd)"
   if [ -n "$(vault_lookup "$name")" ]; then
@@ -105,8 +114,11 @@ kill_subtree() {
   local pid=$1
   # Kill direct children (esbuild, workers) first, then the parent. Use
   # numeric signal `-9` — it's portable across macOS/Linux pkill variants.
-  pkill -9 -P "$pid" 2>/dev/null
-  kill -9 "$pid" 2>/dev/null
+  # `|| :` protects against `set -e` aborting the trap before the parent
+  # gets killed: pkill returns non-zero when a process has no live
+  # children, and kill returns non-zero if the process already exited.
+  pkill -9 -P "$pid" 2>/dev/null || :
+  kill -9 "$pid" 2>/dev/null || :
 }
 
 run_quartz() {
