@@ -24,6 +24,11 @@ if [ ! -d "$VAULT" ]; then
   exit 1
 fi
 
+# Bring the Quartz install up to the latest overlay before serving. Idempotent;
+# a drift-free run costs only a few hash computations. This removes the need to
+# remember scripts/install.sh after pulling wikiforge.
+bash "$(dirname "$0")/sync-overlay.sh"
+
 # Force-kill a node process and its children (esbuild, etc.) on Ctrl+C.
 # Quartz's serve mode catches SIGINT but does not actually exit — the file
 # watcher keeps the event loop alive. `exec` to forward signals is not
