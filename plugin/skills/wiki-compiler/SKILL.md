@@ -234,7 +234,7 @@ For EACH topic that has new or changed source files (i.e. not skipped by the Inc
 1. Read ALL source files classified under that topic (need full context, not just changed files)
 2. Write the topic **hub article** to `{output}/topics/{topic-slug}.md`
 3. **Determine article structure:**
-   - If `.wiki-compiler.json` has an `article_sections` array: use those sections in order. Each section's `description` field tells you what content belongs there.
+   - If the active config file (`.wiki-compiler.yml`, or legacy `.wiki-compiler.json` if YAML isn't present) defines an `article_sections` array: use those sections in order. Each section's `description` field tells you what content belongs there.
    - If `article_sections` is absent: fall back to `${CLAUDE_PLUGIN_ROOT}/templates/article-template.md`
 4. Fill every section with specific, factual content — no placeholders
 5. **Lead** is a Wikipedia-style 1-3 paragraph intro. No preamble; start with the topic name bolded and its definition.

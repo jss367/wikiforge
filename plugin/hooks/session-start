@@ -39,17 +39,14 @@ get_config_field() {
   if [ "$config_ext" = "json" ]; then
     node -e "const c=require('$config_file'); console.log(c.$field || '$default')" 2>/dev/null || echo "$default"
   else
-    # YAML: match `field: value` at line start. Strip trailing YAML inline
-    # comment (` # ...` — a comment in YAML requires whitespace before #),
-    # then strip surrounding quotes if present.
+    # YAML scalar parsing is delegated to a helper script. Handles
+    # double-quoted, single-quoted, and unquoted values; strips inline
+    # comments ONLY on unquoted values so `name: "Project #42"` is
+    # preserved. Inline heredoc-in-$() breaks bash parsing when the
+    # node script contains single quotes (regex), so this is external.
+    local helper="$(dirname "${BASH_SOURCE[0]}")/_read-yaml-field.js"
     local val
-    val=$(grep -E "^${field}:" "$config_file" | head -1 | sed -E "
-      s/^${field}:[[:space:]]*//
-      s/[[:space:]]+#.*\$//
-      s/^\"(.*)\"\$/\1/
-      s/^'(.*)'\$/\1/
-      s/[[:space:]]+\$//
-    ")
+    val=$(node "$helper" "$config_file" "$field" 2>/dev/null)
     if [ -z "$val" ]; then
       echo "$default"
     else

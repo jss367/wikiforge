@@ -9,6 +9,28 @@ const path = require('path');
 
 const PORT = 3848;
 
+// Minimal YAML scalar reader for top-level string fields. Handles
+// double-quoted, single-quoted, and unquoted values; strips inline
+// comments only on unquoted values so that quoted strings containing
+// "#" or trailing "# comment" after a quoted value are both safe.
+// Returns null if the field isn't present.
+function getYamlScalar(content, field) {
+  const line = content.split('\n').find(l => l.startsWith(field + ':'));
+  if (!line) return null;
+  let v = line.slice(field.length + 1).trim();
+  if (v.startsWith('"')) {
+    const m = v.match(/^"((?:[^"\\]|\\.)*)"/);
+    return m ? m[1] : null;
+  }
+  if (v.startsWith("'")) {
+    const m = v.match(/^'((?:[^']|'')*)'/);
+    return m ? m[1].replace(/''/g, "'") : null;
+  }
+  const commentAt = v.search(/\s+#/);
+  if (commentAt >= 0) v = v.slice(0, commentAt);
+  return v.trim();
+}
+
 // Parse CLI args
 let wikiDir = null;
 for (let i = 2; i < process.argv.length; i++) {
@@ -27,23 +49,7 @@ if (!wikiDir) {
   let output = null;
   if (fs.existsSync(ymlPath)) {
     const content = fs.readFileSync(ymlPath, 'utf8');
-    const m = content.match(/^output:\s*(.*)$/m);
-    if (m) {
-      let raw = m[1].trim();
-      // Strip YAML inline comment (` # ...`) on unquoted values. A YAML
-      // comment requires whitespace before the #, so a bare "#" in a
-      // filename segment is safe.
-      if (!raw.startsWith('"') && !raw.startsWith("'")) {
-        const commentAt = raw.search(/\s+#/);
-        if (commentAt >= 0) raw = raw.slice(0, commentAt).trim();
-      } else {
-        // Strip surrounding quotes on quoted values.
-        raw = raw.replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1');
-      }
-      output = raw || 'wiki/';
-    } else {
-      output = 'wiki/';
-    }
+    output = getYamlScalar(content, 'output') || 'wiki/';
   } else if (fs.existsSync(jsonPath)) {
     const config = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
     output = config.output || 'wiki/';
