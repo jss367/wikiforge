@@ -4,7 +4,7 @@ Compile all configured markdown source files into a topic-based wiki.
 
 ## Instructions
 
-1. **Read configuration.** Prefer `.wiki-compiler.yml` at the project root. If only `.wiki-compiler.json` exists, migrate it (parse, re-emit as YAML, delete the JSON). If neither exists, tell the user to run `/wiki-init` first.
+1. **Read configuration.** Prefer `.wiki-compiler.yml` at the project root. If only `.wiki-compiler.json` exists, migrate it (parse, re-emit as YAML, delete the JSON) — **except in dry-run mode**, where the migration is reported as a pending action but no files are written or deleted. If neither config file exists, tell the user to run `/wiki-init` first.
 
 2. **Validate configuration:**
    - `sources[]` must have at least one entry

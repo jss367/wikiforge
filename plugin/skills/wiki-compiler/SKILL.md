@@ -94,11 +94,16 @@ For each topic, decide RECOMPILE or SKIP. The decision must invalidate correctly
 **Plus one global state field:**
 - `schema_hash`: hash of schema-level fields that affect all topics — `article_sections`, `mode`, `output`, `link_style`, and any other cross-cutting config that changes what every compile emits
 
-**Decision (per topic):**
+**Global gates applied before the per-topic loop:**
+
+- If `--topic <slug>` was passed, restrict the entire compile to that one slug. Every other topic is skipped without any further evaluation. The per-topic loop below runs for exactly one topic, and step 2 below fires for it.
+- If `--force` was passed with no `--topic`, every topic enters the loop and hits step 2.
+
+**Decision (per topic in the restricted loop):**
 
 1. **No prior compile?** → RECOMPILE (first-run behavior).
-2. **`--force` or `--topic <slug>` targets this topic?** → RECOMPILE.
-3. **Schema change?** Compute the current `schema_hash` from config. If it differs from the stored `schema_hash` → RECOMPILE (applies to every topic; check this once at the start of the skip pass and, if changed, skip the rest of the skip checks for all topics).
+2. **`--force`, or `--topic <slug>` and this IS the targeted slug?** → RECOMPILE.
+3. **Schema change?** Compute the current `schema_hash` from config. If it differs from the stored `schema_hash` → RECOMPILE (applies to every topic; check this once at the start of the skip pass and, if changed, RECOMPILE every topic without running the remaining per-topic checks).
 4. **Source-set change?** Compute the current source set (after Phase 2 + per-topic sources/excludes resolution). If it differs from `topics.<slug>.sources` in the prior state — any addition, removal, or rename — → RECOMPILE. This catches deleted or renamed sources that would otherwise leave stale Sources entries.
 5. **Config-scope change?** Compute a fresh hash of `preferences` + `topics.<slug>` from the current config. If it differs from the stored `topics.<slug>.config_hash` → RECOMPILE *this topic only*. A change to one topic's `notes` does not invalidate other topics.
 6. **Source-content change?** For each current source, compare its `mtime` to the compiled hub's `mtime` at `{output}/topics/{slug}.md`. If any source is newer → RECOMPILE.
