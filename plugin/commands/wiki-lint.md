@@ -4,7 +4,7 @@ Run health checks on the compiled wiki to find issues.
 
 ## Instructions
 
-1. **Read configuration** from `.wiki-compiler.json`. If not found, tell the user to run `/wiki-init` first.
+1. **Read configuration** from `.wiki-compiler.yml` (or legacy `.wiki-compiler.json`). If not found, tell the user to run `/wiki-init` first.
 
 2. **Read the wiki state:**
    - Read `{output}/index.md` for current topics

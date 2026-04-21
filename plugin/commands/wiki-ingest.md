@@ -6,7 +6,7 @@ Interactive workflow for adding one source file to the wiki. The LLM reads the f
 
 ### Step 1: Validate
 
-- Read `.wiki-compiler.json` from the project root (or nearest parent directory). If not found, tell the user to run `/wiki-init` first.
+- Read `.wiki-compiler.yml` (or legacy `.wiki-compiler.json`) from the project root (or nearest parent directory). If not found, tell the user to run `/wiki-init` first.
 - Accept one argument: the file path to ingest (e.g., `/wiki-ingest Knowledge/meetings/2026-04-07-standup.md`)
 - If no argument provided, ask: "Which file would you like to ingest?"
 - Verify the file exists and is a `.md` file
@@ -32,7 +32,7 @@ Interactive workflow for adding one source file to the wiki. The LLM reads the f
 For each affected topic:
 
 1. Read the current topic article from `{output}/topics/{slug}.md`
-2. Read `article_sections` from `.wiki-compiler.json` (or use default template from `${CLAUDE_PLUGIN_ROOT}/templates/article-template.md` if absent)
+2. Read `article_sections` from `.wiki-compiler.yml` (or legacy `.wiki-compiler.json`; use default template from `${CLAUDE_PLUGIN_ROOT}/templates/article-template.md` if absent)
 3. Integrate the new source's information into the relevant sections
 4. Respect the user's emphasis guidance from Step 2
 5. Update coverage indicators — the source count may change the coverage level for some sections

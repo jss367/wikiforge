@@ -9,6 +9,9 @@ This skill contains the 5-phase algorithm for compiling source files into a topi
 
 **Safety rule:** NEVER modify any file outside the configured output directory. Source files are read-only.
 
+**Exceptions (allowed writes outside the output directory):**
+- `.wiki-compiler.yml` and `.wiki-compiler.json` at the project root. The skill writes these only in two situations: (1) one-time JSON→YAML migration on first run if only the JSON file exists, and (2) appending a user-approved directive to `preferences` or `topics.<slug>.notes` via the "Learning from user feedback" loop. All other edits to source notes remain out of scope.
+
 ## Prerequisites
 
 Before running, read the compiler config file from the project root. Prefer `.wiki-compiler.yml`; fall back to `.wiki-compiler.json` if the YAML file doesn't exist. If ONLY the JSON file exists, **migrate it**: parse it, re-emit as YAML at `.wiki-compiler.yml`, then delete the JSON file. The two formats share the same schema — YAML is preferred because it supports multi-line strings and comments, which the `preferences` and `topics.<slug>.notes` fields benefit from.
