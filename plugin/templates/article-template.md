@@ -4,6 +4,7 @@
      and are compiled per the sub-article template. -->
 
 ---
+title: {Topic Name}
 topic: {Topic Name}
 last_compiled: {YYYY-MM-DD}
 source_count: {number}
@@ -11,8 +12,6 @@ source: {relative path from vault root to the single best "primary" source note 
 sub_pages: [{list of sub-page slugs created under topics/{topic-slug}/}]
 status: active
 ---
-
-# {Topic Name}
 
 **{Topic Name}** {is — present tense — a one-sentence definition. The topic name MUST appear in bold on its first mention and MUST be the grammatical subject of the opening sentence. No preamble, no "this note covers…", no hedging. Definition first.}
 
@@ -70,4 +69,7 @@ status: active
         subject of the opening sentence. The lead (everything before the
         first `##` heading) MUST stay under 150 words. If content would push
         it longer, move detail into a section and leave a concise summary.
+     8. The page title lives in the frontmatter `title:` field only. Do NOT add a
+        leading `# {Topic Name}` H1 — the site renderer draws the title from
+        frontmatter, so a body-level H1 would appear twice on the page.
 -->

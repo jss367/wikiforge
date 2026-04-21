@@ -1,4 +1,6 @@
-# Wiki Schema
+---
+title: Wiki Schema
+---
 
 This file defines the structure and conventions for this knowledge base wiki. It is generated on first compile and co-evolved between human and LLM on subsequent runs.
 

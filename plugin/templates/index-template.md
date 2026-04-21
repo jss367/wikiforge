@@ -1,4 +1,6 @@
-# {name} Knowledge Base
+---
+title: {name} Knowledge Base
+---
 
 Last compiled: {date}
 Total topics: {count} | Total concepts: {count} | Total sources: {source_count}

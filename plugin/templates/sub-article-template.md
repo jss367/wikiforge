@@ -4,6 +4,7 @@
      a track, a concept). Dense with content and images; the hub summarizes. -->
 
 ---
+title: {Sub-topic Title}
 topic: {parent topic slug}
 sub_page: {sub-slug}
 last_compiled: {YYYY-MM-DD}
@@ -11,8 +12,6 @@ source: {relative path from vault root to the primary source note}
 sources: [{list of all contributing source file paths}]
 status: active
 ---
-
-# {Sub-topic Title}
 
 **{Sub-topic}** {is — present tense — a one-sentence definition scoped to the parent topic. The sub-topic name MUST appear in bold on its first mention and MUST be the grammatical subject of the opening sentence. No preamble, no "this page covers…", no hedging. Definition first.}
 
@@ -68,4 +67,7 @@ status: active
         subject of the opening sentence. The lead (everything before the
         first `##` heading) MUST stay under 150 words. If content would push
         it longer, move detail into a section and leave a concise summary.
+     8. The page title lives in the frontmatter `title:` field only. Do NOT add a
+        leading `# {Sub-topic Title}` H1 — the site renderer draws the title from
+        frontmatter, so a body-level H1 would appear twice on the page.
 -->

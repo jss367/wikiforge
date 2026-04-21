@@ -160,9 +160,14 @@ function loadGraph() {
 
   const indexContent = fs.readFileSync(indexPath, 'utf8');
 
-  // Extract wiki name from first heading
-  const nameMatch = indexContent.match(/^# (.+)/m);
-  const name = nameMatch ? nameMatch[1].replace(' Knowledge Base', '') : 'Wiki';
+  // Prefer the frontmatter title (new template); fall back to a body `# ...`
+  // heading for wikis compiled before the title moved into frontmatter.
+  const { meta: indexMeta, body: indexBody } = parseFrontmatter(indexContent);
+  const rawName =
+    (typeof indexMeta.title === 'string' && indexMeta.title) ||
+    (indexBody.match(/^# (.+)/m) || [])[1] ||
+    '';
+  const name = rawName ? rawName.replace(/ Knowledge Base$/, '') : 'Wiki';
 
   // Extract stats
   const statsMatch = indexContent.match(/Total topics: (\d+) \| Total sources: (\d+)/);
@@ -206,9 +211,13 @@ function loadArticle(type, slug) {
   const { meta, body } = parseFrontmatter(content);
   const sections = parseSections(body);
 
-  // Extract title from first heading
+  // Prefer the frontmatter title (new template); fall back to a body `# ...`
+  // heading for wikis compiled before the title moved into frontmatter, then
+  // to the slug.
   const titleMatch = body.match(/^# (.+)/m);
-  const title = titleMatch ? titleMatch[1] : slug;
+  const title =
+    (typeof meta.title === 'string' && meta.title) ||
+    (titleMatch ? titleMatch[1] : slug);
 
   return { slug, title, meta, sections };
 }
