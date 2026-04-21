@@ -1,6 +1,7 @@
 import { PageLayout, SharedLayout } from "./quartz/cfg"
 import * as Component from "./quartz/components"
 import EditInObsidian from "./quartz/components/EditInObsidian"
+import LastEdited from "./quartz/components/LastEdited"
 
 // Title-cases Explorer node display names. Inlined because Quartz serializes
 // this with .toString() and runs it in the browser — it cannot close over
@@ -38,6 +39,7 @@ export const defaultContentPageLayout: PageLayout = {
     Component.TagList(),
     EditInObsidian(),
   ],
+  afterBody: [LastEdited()],
   left: [
     Component.PageTitle(),
     Component.MobileOnly(Component.Spacer()),
@@ -73,6 +75,7 @@ export const defaultListPageLayout: PageLayout = {
     Component.ContentMeta(),
     EditInObsidian(),
   ],
+  afterBody: [LastEdited()],
   left: [
     Component.PageTitle(),
     Component.MobileOnly(Component.Spacer()),

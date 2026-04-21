@@ -13,11 +13,11 @@ sub_pages: [{list of sub-page slugs created under topics/{topic-slug}/}]
 status: active
 ---
 
-**{Topic Name}** {is a one-sentence definition of what this topic IS. Wikipedia-style lead: no preamble, no "this note covers...", just the definition.}
+**{Topic Name}** {is — present tense — a one-sentence definition. The topic name MUST appear in bold on its first mention and MUST be the grammatical subject of the opening sentence. No preamble, no "this note covers…", no hedging. Definition first.}
 
-{Second paragraph: 2-4 sentences of high-level scope, current state, and why it matters. Use inline wikilinks for named entities (sub-topics, people, concepts, organizations).}
+{Second paragraph: 2-4 sentences of high-level scope and why the topic matters. Use inline wikilinks for every named entity (sub-topics, people, concepts, organizations). Avoid temporal words like "new", "recent", or "current".}
 
-{Optionally a third paragraph if the topic is large. Keep the whole lead under ~150 words.}
+{Optionally a third paragraph if the topic warrants it. HARD CAP: the entire lead (all paragraphs before the first `##` heading) stays under 150 words. If the lead would be longer, move detail into a section.}
 
 ## {Section 1 — e.g., Background, Motivation, Overview}
 
@@ -64,7 +64,12 @@ status: active
         section titles (these go stale).
      6. Embed images when source material includes relevant figures. The compiler
         copies them into wiki/images/{topic-slug}/ and the article references that path.
-     7. The page title lives in the frontmatter `title:` field only. Do NOT add a
+     7. LEAD PARAGRAPH: The article's first paragraph is the lead. The topic
+        name MUST appear in **bold** on its first mention and MUST be the
+        subject of the opening sentence. The lead (everything before the
+        first `##` heading) MUST stay under 150 words. If content would push
+        it longer, move detail into a section and leave a concise summary.
+     8. The page title lives in the frontmatter `title:` field only. Do NOT add a
         leading `# {Topic Name}` H1 — the site renderer draws the title from
         frontmatter, so a body-level H1 would appear twice on the page.
 -->

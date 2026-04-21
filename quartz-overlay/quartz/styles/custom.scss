@@ -9,12 +9,16 @@
 :root[saved-theme="light"] {
   // Wikipedia's visited-link purple, readable on a white page.
   --visited: #0b0080;
+  // Wikipedia's redlink red for unresolved [[wikilinks]].
+  --redlink: #ba0000;
 }
 
 :root[saved-theme="dark"] {
   // Soft lavender chosen to read well against Quartz's dark background
   // (#161618) while still being visually distinct from the blue of --secondary.
   --visited: #b7a6ff;
+  // Lighter red so unresolved links stay legible on the dark background.
+  --redlink: #ff6b6b;
 }
 
 // Visited internal links in article content get the theme-aware purple so
@@ -24,18 +28,21 @@
   color: var(--visited);
 }
 
-// Bottom border under the article title (H1), Wikipedia-style.
-.page-header .article-title {
-  border-bottom: 1px solid var(--lightgray);
-  padding-bottom: 0.17em;
-  margin-bottom: 0.5em;
-}
+// Thin rules under H1/H2 — Wikipedia signature. Can be toggled off by the
+// theme switcher (see ThemeSwitcher component) which sets saved-rules="off"
+// on the root element. Default is "on" (no attribute set).
+:root:not([saved-rules="off"]) {
+  .page-header .article-title {
+    border-bottom: 1px solid var(--lightgray);
+    padding-bottom: 0.17em;
+    margin-bottom: 0.5em;
+  }
 
-// Bottom border under every section heading (H2) inside the article body.
-article h2 {
-  border-bottom: 1px solid var(--lightgray);
-  padding-bottom: 0.17em;
-  margin-top: 1em;
+  article h2 {
+    border-bottom: 1px solid var(--lightgray);
+    padding-bottom: 0.17em;
+    margin-top: 1em;
+  }
 }
 
 // Subtle gray on code block background. --lightgray picks up the right
@@ -44,4 +51,18 @@ article h2 {
 pre,
 pre > code {
   background-color: var(--lightgray);
+}
+
+// Wikipedia-style redlinks: unresolved [[wikilinks]] render in red so readers
+// can see where the wiki wants a page that doesn't exist yet. Scoped to the
+// article center column (mirrors the --visited rule above) so the extra
+// specificity beats base.scss without depending on @use ordering, and sidebar
+// chrome keeps its stock styling.
+.page > #quartz-body .center a.internal.broken {
+  color: var(--redlink);
+  opacity: 1;
+  &:hover {
+    color: var(--redlink);
+    opacity: 0.8;
+  }
 }

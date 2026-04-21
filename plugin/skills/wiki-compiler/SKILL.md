@@ -272,6 +272,8 @@ These directives carry the user's accumulated editorial voice — structural pre
 6. **Embed images** when source material includes relevant figures. Reference images at `../images/{topic-slug}/{filename}` (Phase 3b handles the copy). At least one image per article when any exist in source material.
 7. **Frontmatter source field.** Include `source: {relative path from vault root}` pointing to the single best primary source note. This drives the "Edit in Obsidian" link rendered by Quartz.
 
+**Lead-paragraph discipline.** The very first paragraph under the H1 is the article's *lead* and carries the single most important stylistic constraint. Open with the bolded topic name as the grammatical subject of a present-tense definitional sentence — no framing preamble, no "this page covers…", no hedging. The entire lead (every paragraph before the first `##` heading) is capped at 150 words; when the draft spills past that, move the excess into a section and leave a tight summary upstairs. The templates in `plugin/templates/` encode this as rule 7 of the writing-rules comment; this paragraph is a deliberate reinforcement — the rule is load-bearing for the Wikipedia feel and easy to drift from.
+
 ### Link style
 - `obsidian`: Use `[[relative/path/to/file]]` (without .md extension)
 - `markdown`: Use `[filename](relative/path/to/file.md)`
