@@ -39,9 +39,17 @@ get_config_field() {
   if [ "$config_ext" = "json" ]; then
     node -e "const c=require('$config_file'); console.log(c.$field || '$default')" 2>/dev/null || echo "$default"
   else
-    # YAML: match `field: value` at line start, strip surrounding quotes.
+    # YAML: match `field: value` at line start. Strip trailing YAML inline
+    # comment (` # ...` — a comment in YAML requires whitespace before #),
+    # then strip surrounding quotes if present.
     local val
-    val=$(grep -E "^${field}:" "$config_file" | head -1 | sed -E "s/^${field}:[[:space:]]*//; s/^\"(.*)\"$/\1/; s/^'(.*)'$/\1/")
+    val=$(grep -E "^${field}:" "$config_file" | head -1 | sed -E "
+      s/^${field}:[[:space:]]*//
+      s/[[:space:]]+#.*\$//
+      s/^\"(.*)\"\$/\1/
+      s/^'(.*)'\$/\1/
+      s/[[:space:]]+\$//
+    ")
     if [ -z "$val" ]; then
       echo "$default"
     else
@@ -90,7 +98,12 @@ else
   # Stale detection: count source files changed since last compile
   stale_warning=""
   if [ "$auto_update" = "prompt" ] && [ "$last_compiled" != "unknown" ]; then
-    sources_json=$(node -e "const c=require('$config_file'); (c.sources||[]).forEach(s => console.log(s.path))" 2>/dev/null)
+    # Read source paths from .compile-state.json (written by the compiler)
+    # rather than parsing the config. State is always JSON, so this works
+    # regardless of whether the config is YAML or legacy JSON. It also
+    # correctly reflects what was actually compiled last time, which is
+    # what stale-detection should compare against.
+    sources_json=$(node -e "const s=require('$state_file'); (s.source_locations||[]).forEach(p => console.log(p))" 2>/dev/null)
     changed_count=0
     while IFS= read -r src_path; do
       if [ -n "$src_path" ] && [ -d "$project_root/$src_path" ]; then

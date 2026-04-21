@@ -27,8 +27,23 @@ if (!wikiDir) {
   let output = null;
   if (fs.existsSync(ymlPath)) {
     const content = fs.readFileSync(ymlPath, 'utf8');
-    const m = content.match(/^output:\s*["']?([^"'\n]+?)["']?\s*$/m);
-    output = m ? m[1].trim() : 'wiki/';
+    const m = content.match(/^output:\s*(.*)$/m);
+    if (m) {
+      let raw = m[1].trim();
+      // Strip YAML inline comment (` # ...`) on unquoted values. A YAML
+      // comment requires whitespace before the #, so a bare "#" in a
+      // filename segment is safe.
+      if (!raw.startsWith('"') && !raw.startsWith("'")) {
+        const commentAt = raw.search(/\s+#/);
+        if (commentAt >= 0) raw = raw.slice(0, commentAt).trim();
+      } else {
+        // Strip surrounding quotes on quoted values.
+        raw = raw.replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1');
+      }
+      output = raw || 'wiki/';
+    } else {
+      output = 'wiki/';
+    }
   } else if (fs.existsSync(jsonPath)) {
     const config = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
     output = config.output || 'wiki/';
