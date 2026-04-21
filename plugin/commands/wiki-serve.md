@@ -1,47 +1,39 @@
 # Serve Compiled Wiki Locally
 
-Serve the Obsidian vault or compiled wiki via Quartz at `localhost:8080` / `localhost:8081`. Runs `scripts/wiki-serve.sh`, which auto-applies the latest `quartz-overlay/` before serving — so recent wikiforge changes (title-casing, redlinks, footer, etc.) always take effect without the user running `scripts/install.sh` manually.
+Serve a registered Obsidian vault (or the legacy default vault) via Quartz on a deterministic localhost port. Delegates to `scripts/wiki-serve.sh`, which auto-applies the latest `quartz-overlay/` before each serve — so recent wikiforge changes (title-casing, redlinks, footer, etc.) always take effect without the user running `scripts/install.sh` manually.
 
 ## Usage
 
-`/wiki-serve` — compiled wiki on :8081 (default)
-`/wiki-serve raw` — raw notes on :8080
-`/wiki-serve compiled` — compiled wiki on :8081
-`/wiki-serve both` — both side-by-side
+`/wiki-serve` — serve the legacy default vault (`$VAULT` or `~/Documents/Obsidian Vault`) on :8081 (compiled)
+`/wiki-serve <name>` — serve a registered vault in compiled mode
+`/wiki-serve <name> raw` — serve a registered vault in raw mode
+`/wiki-serve <name> both` — serve both modes side-by-side for one vault
+`/wiki-serve --list` — show registered vaults
+`/wiki-serve --add <name> <path>` — register a new vault (auto-assigns next free port)
+`/wiki-serve --rm <name>` — unregister
+
+Each registered vault gets one compiled-wiki port (starting at 8081, stepping by 2); raw is served at `port - 1`.
 
 ## Instructions
 
 1. Resolve the wikiforge repo root. `${CLAUDE_PLUGIN_ROOT}` is the plugin dir; the bash scripts live one level up at `${CLAUDE_PLUGIN_ROOT}/../scripts/`. If `WIKIFORGE_ROOT` env var is set, prefer that.
 
-2. Pick the mode from the user's argument (default `compiled`).
-
-3. Start the server in the background via Bash's `run_in_background: true`:
+2. Forward the user's args to the bash script. For commands that return immediately (`--list`, `--add`, `--rm`, `--help`), run with Bash normally and report the output. For serve commands (default, or `<name> [mode]`), run in the background via `run_in_background: true` since the server runs until killed.
 
    ```bash
-   bash "${CLAUDE_PLUGIN_ROOT}/../scripts/wiki-serve.sh" {mode}
+   bash "${CLAUDE_PLUGIN_ROOT}/../scripts/wiki-serve.sh" {args}
    ```
 
-   The script will first call `sync-overlay.sh` (fast, idempotent) and then `node ./quartz/bootstrap-cli.mjs build --serve`. The server runs until killed.
+3. For serve commands, tell the user the URL that was printed (the bash script echoes `Serving COMPILED wiki at http://localhost:NNNN`). Also note that the overlay was auto-synced — so title-cased headings, redlinks, the last-edited footer, etc., are live.
 
-4. Report to the user:
-
-   ```
-   Wiki serving at:
-   - Compiled: http://localhost:8081   (or whichever mode applies)
-   
-   Overlay was auto-synced before launch, so the latest wikiforge changes
-   (title-case headings, redlinks, last-edited footer, etc.) are in effect.
-   
-   Stop with the kill command, or interrupt the background task.
-   ```
-
-5. If the user asks to stop, kill the background bash process.
+4. If the user asks to stop, kill the background bash process.
 
 ## When to use vs. when not
 
-Use `/wiki-serve` when the user wants to view the wiki in a browser. Do NOT use it for recompiling source notes into the wiki — that's `/wiki-compile`. The two are independent: you can serve without recompiling, and you can recompile without serving.
+Use `/wiki-serve` to view a wiki in a browser. Do NOT use it for recompiling source notes — that's `/wiki-compile`. The two are independent: you can serve without recompiling, and you can recompile without serving.
 
 ## Requirements
 
-- Full wikiforge repo clone (the bash scripts live outside `plugin/`). Users who install the plugin via marketplace without cloning the repo will need to either clone it or run `install.sh` manually — `/wiki-serve` surfaces a clear error in that case.
-- Quartz installed at `~/Documents/wiki-quartz` (run `scripts/install.sh` once on first setup).
+- Full wikiforge repo clone (the bash scripts live outside `plugin/`). Marketplace-only installs won't have access to them.
+- Quartz installed at `~/Documents/wiki-quartz` — run `scripts/install.sh` once on first setup.
+- `jq` for the multi-vault commands (`brew install jq`). Legacy single-vault serves don't need it.

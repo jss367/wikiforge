@@ -12,7 +12,6 @@ set -e
 QUARTZ="${QUARTZ:-$HOME/Documents/wiki-quartz}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OVERLAY="$REPO_ROOT/quartz-overlay"
-OVERLAY_MARKER="$QUARTZ/.wikiforge-overlay-hash"
 DEPS_MARKER="$QUARTZ/.wikiforge-deps-hash"
 
 if [ ! -d "$QUARTZ" ]; then
@@ -25,21 +24,32 @@ if [ ! -d "$OVERLAY" ]; then
   exit 1
 fi
 
-# Deterministic content hash of the overlay tree. Null-delimited so filenames
-# with spaces don't break sort/xargs.
-overlay_hash() {
-  (cd "$OVERLAY" && find . -type f -print0 | sort -z | xargs -0 shasum) | shasum | awk '{print $1}'
+# Clean up the old hash-based overlay marker from earlier iterations of this
+# script. No longer used — kept as best-effort housekeeping; safe to remove.
+rm -f "$QUARTZ/.wikiforge-overlay-hash"
+
+# Compare each overlay file against its counterpart in $QUARTZ. This is the
+# right invariant to check: we want every overlay file to be currently in place
+# on the Quartz install. A hash of the overlay *source* alone would miss the
+# case where the user runs `git pull` inside $QUARTZ and upstream modifies a
+# file we overlay — the source hash wouldn't change, but Quartz would have
+# reverted to upstream content for that path.
+overlay_drifted() {
+  local f rel
+  while IFS= read -r -d '' f; do
+    rel="${f#$OVERLAY/}"
+    if ! cmp -s "$f" "$QUARTZ/$rel" 2>/dev/null; then
+      return 0
+    fi
+  done < <(find "$OVERLAY" -type f -print0)
+  return 1
 }
 
-current_hash=$(overlay_hash)
-stored_hash=$(cat "$OVERLAY_MARKER" 2>/dev/null || echo "")
-
-if [ "$current_hash" = "$stored_hash" ]; then
-  echo "[wikiforge] overlay up to date"
-else
+if overlay_drifted; then
   echo "[wikiforge] overlay drift — syncing into $QUARTZ/"
   cp -R "$OVERLAY/"* "$QUARTZ/"
-  echo "$current_hash" > "$OVERLAY_MARKER"
+else
+  echo "[wikiforge] overlay up to date"
 fi
 
 # Refresh Quartz dependencies when they drift. Hash the *effective* package
