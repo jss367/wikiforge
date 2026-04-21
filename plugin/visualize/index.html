@@ -991,10 +991,13 @@ const exportList = document.getElementById('exportList');
 const exportConfirmBtn = document.getElementById('exportConfirm');
 // Cache fetched articles so re-opening the modal is instant.
 const exportArticleCache = {};
-// Selection state: { 'type:slug': { included: bool, sections: { [heading]: bool } } }
+// Selection state: { 'type:slug': { included: bool, sections: bool[] } }
+// `sections` is indexed by section position (0..n-1) rather than heading text
+// because `parseSections` preserves duplicate `##` headings in an article, and
+// keying by heading would collide those entries into one.
 let exportSelection = {};
 // Index→key mapping for the currently-rendered modal list.
-let currentExportRender = { articleKeyById: [], sectionsByAid: [] };
+let currentExportRender = { articleKeyById: [] };
 
 async function fetchArticle(type, slug) {
   const key = `${type}:${slug}`;
@@ -1027,10 +1030,9 @@ async function openExportModal() {
   exportSelection = {};
   articles.forEach(({ type, slug, article }) => {
     const key = `${type}:${slug}`;
-    const sections = {};
-    (article?.sections || []).forEach(s => {
-      const priorVal = prior[key]?.sections?.[s.heading];
-      sections[s.heading] = priorVal === undefined ? true : priorVal;
+    const priorSections = Array.isArray(prior[key]?.sections) ? prior[key].sections : null;
+    const sections = (article?.sections || []).map((_, j) => {
+      return priorSections && priorSections[j] !== undefined ? priorSections[j] : true;
     });
     exportSelection[key] = {
       included: prior[key]?.included !== undefined ? prior[key].included : true,
@@ -1055,7 +1057,7 @@ function renderExportList(articles) {
     const key = `${type}:${slug}`;
     articleKeyById[i] = key;
     const sections = article?.sections || [];
-    const checkedCount = sections.filter(s => exportSelection[key].sections[s.heading]).length;
+    const checkedCount = sections.filter((_, j) => exportSelection[key].sections[j]).length;
     const totalCount = sections.length;
     return `
       <div class="export-article" data-aid="${i}">
@@ -1071,7 +1073,7 @@ function renderExportList(articles) {
             ? '<div class="export-section-empty">No subsections</div>'
             : sections.map((s, j) => {
                 const cleanHeading = s.heading.replace(/\[coverage:.*?\]/i, '').trim();
-                const checked = exportSelection[key].sections[s.heading] ? 'checked' : '';
+                const checked = exportSelection[key].sections[j] ? 'checked' : '';
                 return `
                   <label class="export-section">
                     <input type="checkbox" class="export-checkbox export-section-check"
@@ -1083,16 +1085,12 @@ function renderExportList(articles) {
       </div>`;
   }).join('');
 
-  // Cache each article's section headings by index so the change handler can
-  // map `data-sid` back to the original heading string.
-  const sectionsByAid = articles.map(({ article }) => (article?.sections || []).map(s => s.heading));
-
   // Publish the index map before we kick off the initial
   // `updateArticleCheckboxState` calls below — otherwise those initial calls
   // look up `currentExportRender.articleKeyById[aid]` against the stale
   // mapping and silently no-op, leaving article checkboxes unchecked on
   // first render even when all sections are included.
-  currentExportRender = { articleKeyById, sectionsByAid };
+  currentExportRender = { articleKeyById };
 
   // Wire up interactions
   exportList.querySelectorAll('.export-article-header').forEach(h => {
@@ -1104,9 +1102,9 @@ function renderExportList(articles) {
   exportList.querySelectorAll('.export-section-check').forEach(cb => {
     cb.addEventListener('change', () => {
       const aid = +cb.dataset.aid;
+      const sid = +cb.dataset.sid;
       const key = articleKeyById[aid];
-      const heading = sectionsByAid[aid][+cb.dataset.sid];
-      exportSelection[key].sections[heading] = cb.checked;
+      exportSelection[key].sections[sid] = cb.checked;
       updateArticleCheckboxState(aid);
     });
   });
@@ -1117,7 +1115,7 @@ function renderExportList(articles) {
       const key = articleKeyById[aid];
       const sel = exportSelection[key];
       const newState = cb.checked;
-      Object.keys(sel.sections).forEach(h => { sel.sections[h] = newState; });
+      for (let j = 0; j < sel.sections.length; j++) sel.sections[j] = newState;
       sel.included = newState;
       exportList.querySelectorAll(`.export-section-check[data-aid="${aid}"]`)
         .forEach(x => { x.checked = newState; });
@@ -1130,13 +1128,13 @@ function updateArticleCheckboxState(aid) {
   const key = currentExportRender.articleKeyById[aid];
   if (key === undefined) return;
   const sel = exportSelection[key];
-  const headings = Object.keys(sel.sections);
-  const checkedCount = headings.filter(h => sel.sections[h]).length;
+  const total = sel.sections.length;
+  const checkedCount = sel.sections.filter(Boolean).length;
   const cb = exportList.querySelector(`.export-article-check[data-aid="${aid}"]`);
   const counter = exportList.querySelector(`[data-aid-count="${aid}"]`);
-  if (counter) counter.textContent = `${checkedCount}/${headings.length}`;
+  if (counter) counter.textContent = `${checkedCount}/${total}`;
   if (!cb) return;
-  if (headings.length === 0) {
+  if (total === 0) {
     // No subsections to toggle — mirror the article-level `included` flag so
     // users can still include/exclude these via the article checkbox.
     cb.checked = !!sel.included;
@@ -1147,7 +1145,7 @@ function updateArticleCheckboxState(aid) {
     cb.checked = false;
     cb.indeterminate = false;
     sel.included = false;
-  } else if (checkedCount === headings.length) {
+  } else if (checkedCount === total) {
     cb.checked = true;
     cb.indeterminate = false;
     sel.included = true;
@@ -1161,7 +1159,7 @@ function updateArticleCheckboxState(aid) {
 function setAllSelections(state) {
   Object.keys(exportSelection).forEach(key => {
     const sel = exportSelection[key];
-    Object.keys(sel.sections).forEach(h => { sel.sections[h] = state; });
+    for (let j = 0; j < sel.sections.length; j++) sel.sections[j] = state;
     sel.included = state;
   });
   exportList.querySelectorAll('.export-section-check').forEach(cb => { cb.checked = state; });
@@ -1193,7 +1191,7 @@ async function runExport() {
       if (!art) continue;
       const filtered = {
         ...art,
-        sections: art.sections.filter(s => sel.sections[s.heading]),
+        sections: art.sections.filter((_, j) => sel.sections[j]),
       };
       exportData.articles[key] = filtered;
     }
