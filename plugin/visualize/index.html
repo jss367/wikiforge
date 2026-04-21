@@ -182,6 +182,15 @@
     background: rgba(255,255,255,0.06);
     color: var(--text-display);
   }
+  .hud-export button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .hud-export button:disabled:hover {
+    border-color: var(--border-subtle);
+    background: rgba(255,255,255,0.03);
+    color: var(--text-primary);
+  }
 
   /* Export modal */
   .modal-overlay {
@@ -456,7 +465,7 @@
 </div>
 
 <div class="hud hud-export" id="hudExport">
-  <button id="exportBtn" title="Export a shareable HTML of selected sections">Export</button>
+  <button id="exportBtn" disabled title="Loading...">Export</button>
 </div>
 
 <div class="modal-overlay" id="exportOverlay">
@@ -570,6 +579,13 @@ async function loadData() {
   legend.innerHTML = nodes.map(n =>
     `<div class="legend-item"><div class="legend-dot" style="background:${n.color}"></div>${n.name}</div>`
   ).join('');
+
+  // Graph data is loaded — safe to allow exports now.
+  const exportBtnEl = document.getElementById('exportBtn');
+  if (exportBtnEl) {
+    exportBtnEl.disabled = false;
+    exportBtnEl.title = 'Export a shareable HTML of selected sections';
+  }
 
   layoutNodes();
   animate();
@@ -1071,7 +1087,12 @@ function renderExportList(articles) {
   // map `data-sid` back to the original heading string.
   const sectionsByAid = articles.map(({ article }) => (article?.sections || []).map(s => s.heading));
 
-  const resolveKey = (el) => articleKeyById[+el.dataset.aid];
+  // Publish the index map before we kick off the initial
+  // `updateArticleCheckboxState` calls below — otherwise those initial calls
+  // look up `currentExportRender.articleKeyById[aid]` against the stale
+  // mapping and silently no-op, leaving article checkboxes unchecked on
+  // first render even when all sections are included.
+  currentExportRender = { articleKeyById, sectionsByAid };
 
   // Wire up interactions
   exportList.querySelectorAll('.export-article-header').forEach(h => {
@@ -1103,10 +1124,6 @@ function renderExportList(articles) {
       updateArticleCheckboxState(aid);
     });
   });
-
-  // Expose these so the standalone updateArticleCheckboxState / setAllSelections
-  // can find the elements and keys.
-  currentExportRender = { articleKeyById, sectionsByAid };
 }
 
 function updateArticleCheckboxState(aid) {
