@@ -4,6 +4,7 @@
      a track, a concept). Dense with content and images; the hub summarizes. -->
 
 ---
+title: {Sub-topic Title}
 topic: {parent topic slug}
 sub_page: {sub-slug}
 last_compiled: {YYYY-MM-DD}
@@ -11,8 +12,6 @@ source: {relative path from vault root to the primary source note}
 sources: [{list of all contributing source file paths}]
 status: active
 ---
-
-# {Sub-topic Title}
 
 **{Sub-topic}** {one-sentence lead. What this is, in the context of the parent topic.}
 
@@ -53,4 +52,6 @@ status: active
      - Inline wikilinks for every named entity
      - Images embedded from wiki/images/{parent-topic}/
      - Encyclopedic tone, no temporal words
+     - Title lives only in frontmatter `title:`; no leading `# {Sub-topic Title}`
+       H1 in the body (the renderer draws the title from frontmatter).
 -->

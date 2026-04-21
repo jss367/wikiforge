@@ -3,14 +3,13 @@
      New codebase projects get custom sections generated during /wiki-init --codebase. -->
 
 ---
+title: {Module/Service Name}
 topic: {Module/Service Name}
 type: codebase
 last_compiled: {YYYY-MM-DD}
 source_count: {number}
 status: active
 ---
-
-# {Module/Service Name}
 
 ## Purpose [coverage: {high|medium|low} -- {N} sources]
 {What this module/service does in one paragraph.

@@ -4,6 +4,7 @@
      and are compiled per the sub-article template. -->
 
 ---
+title: {Topic Name}
 topic: {Topic Name}
 last_compiled: {YYYY-MM-DD}
 source_count: {number}
@@ -11,8 +12,6 @@ source: {relative path from vault root to the single best "primary" source note 
 sub_pages: [{list of sub-page slugs created under topics/{topic-slug}/}]
 status: active
 ---
-
-# {Topic Name}
 
 **{Topic Name}** {is a one-sentence definition of what this topic IS. Wikipedia-style lead: no preamble, no "this note covers...", just the definition.}
 
@@ -65,4 +64,7 @@ status: active
         section titles (these go stale).
      6. Embed images when source material includes relevant figures. The compiler
         copies them into wiki/images/{topic-slug}/ and the article references that path.
+     7. The page title lives in the frontmatter `title:` field only. Do NOT add a
+        leading `# {Topic Name}` H1 — the site renderer draws the title from
+        frontmatter, so a body-level H1 would appear twice on the page.
 -->

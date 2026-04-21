@@ -355,13 +355,12 @@ Write to `{output}/concepts/{concept-slug}.md`:
 
 ```markdown
 ---
+title: {Concept Name}
 concept: {Concept Name}
 last_compiled: {YYYY-MM-DD}
 topics_connected: [{topic1}, {topic2}, {topic3}]
 status: active
 ---
-
-# {Concept Name}
 
 ## Pattern
 {1-2 paragraphs describing the cross-cutting pattern. What keeps recurring and why.}
@@ -405,7 +404,9 @@ The schema is the source of truth for wiki structure. The human can edit it betw
 Write to `{output}/index.md`:
 
 ```markdown
-# {name} Knowledge Base
+---
+title: {name} Knowledge Base
+---
 
 Last compiled: {today's date}
 Total topics: {count} | Total sources: {unique file count}
@@ -468,7 +469,9 @@ For topics that were skipped in this run, preserve their existing entry unchange
 On the **first compile** (no prior `.compile-state.json`), generate `{output}/CONTEXT.md`:
 
 ```markdown
-# Codebase Wiki — Navigation Guide
+---
+title: Codebase Wiki — Navigation Guide
+---
 
 This project has a compiled knowledge wiki. Use it instead of scanning raw files.
 
