@@ -47,7 +47,11 @@ overlay_drifted() {
 
 if overlay_drifted; then
   echo "[wikiforge] overlay drift — syncing into $QUARTZ/"
-  cp -R "$OVERLAY/"* "$QUARTZ/"
+  # `$OVERLAY/.` (not `$OVERLAY/*`) so dotfiles copy too. The glob form
+  # would skip e.g. a future `.npmrc` in the overlay, which `overlay_drifted`
+  # (backed by find -type f) detects — leaving the sync permanently reporting
+  # drift without ever fixing it.
+  cp -R "$OVERLAY/." "$QUARTZ/"
 else
   echo "[wikiforge] overlay up to date"
 fi
@@ -68,5 +72,9 @@ stored_deps_hash=$(cat "$DEPS_MARKER" 2>/dev/null || echo "")
 if [ ! -d "$QUARTZ/node_modules" ] || [ "$current_deps_hash" != "$stored_deps_hash" ]; then
   echo "[wikiforge] Quartz deps out of date — running npm install"
   (cd "$QUARTZ" && npm install)
-  echo "$current_deps_hash" > "$DEPS_MARKER"
+  # Recompute AFTER install: `npm install` can rewrite package-lock.json
+  # (lockfile version bumps, platform-specific entries, etc.). Storing the
+  # pre-install hash would leave the marker immediately stale and trigger
+  # npm install on every subsequent serve.
+  deps_hash > "$DEPS_MARKER"
 fi
