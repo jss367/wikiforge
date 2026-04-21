@@ -2,6 +2,20 @@ import { PageLayout, SharedLayout } from "./quartz/cfg"
 import * as Component from "./quartz/components"
 import EditInObsidian from "./quartz/components/EditInObsidian"
 
+// Title-cases Explorer node display names. Inlined because Quartz serializes
+// this with .toString() and runs it in the browser — it cannot close over
+// anything in this file.
+const titleCaseExplorer = (node: { displayName: string }) => {
+  const raw = node.displayName
+  const hasSpaces = /\s/.test(raw)
+  const spaced = hasSpaces ? raw : raw.replace(/[-_]+/g, " ")
+  node.displayName = spaced
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ")
+}
+
 // components shared across all pages
 export const sharedPageComponents: SharedLayout = {
   head: Component.Head(),
@@ -37,7 +51,7 @@ export const defaultContentPageLayout: PageLayout = {
         { Component: Component.ReaderMode() },
       ],
     }),
-    Component.Explorer(),
+    Component.Explorer({ mapFn: titleCaseExplorer }),
   ],
   // Wikipedia-style: no right sidebar. TOC and backlinks removed for a
   // simpler article-centric layout. If you miss the graph/backlinks, move
@@ -71,7 +85,7 @@ export const defaultListPageLayout: PageLayout = {
         { Component: Component.Darkmode() },
       ],
     }),
-    Component.Explorer(),
+    Component.Explorer({ mapFn: titleCaseExplorer }),
   ],
   right: [],
 }
