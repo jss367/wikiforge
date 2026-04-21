@@ -19,17 +19,28 @@ for (let i = 2; i < process.argv.length; i++) {
 }
 
 if (!wikiDir) {
-  // Try to find wiki dir from .wiki-compiler.json in cwd
-  const configPath = path.join(process.cwd(), '.wiki-compiler.json');
-  if (fs.existsSync(configPath)) {
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    wikiDir = path.resolve(process.cwd(), config.output || 'wiki/');
+  // Try to find wiki dir from .wiki-compiler.yml (preferred) or legacy
+  // .wiki-compiler.json in cwd. We only need the `output` field, so a
+  // tiny scalar parser is enough — avoids adding a js-yaml dependency.
+  const ymlPath = path.join(process.cwd(), '.wiki-compiler.yml');
+  const jsonPath = path.join(process.cwd(), '.wiki-compiler.json');
+  let output = null;
+  if (fs.existsSync(ymlPath)) {
+    const content = fs.readFileSync(ymlPath, 'utf8');
+    const m = content.match(/^output:\s*["']?([^"'\n]+?)["']?\s*$/m);
+    output = m ? m[1].trim() : 'wiki/';
+  } else if (fs.existsSync(jsonPath)) {
+    const config = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+    output = config.output || 'wiki/';
+  }
+  if (output) {
+    wikiDir = path.resolve(process.cwd(), output);
   }
 }
 
 if (!wikiDir || !fs.existsSync(wikiDir)) {
   console.error('Usage: node server.js --wiki-dir path/to/wiki/');
-  console.error('  Or run from a directory with .wiki-compiler.json');
+  console.error('  Or run from a directory with .wiki-compiler.yml (or legacy .wiki-compiler.json)');
   process.exit(1);
 }
 

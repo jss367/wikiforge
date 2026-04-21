@@ -1,15 +1,23 @@
 #!/usr/bin/env bash
 # SessionStart hook for llm-wiki-compiler plugin
-# Detects .wiki-compiler.json and injects wiki context based on mode
+# Detects .wiki-compiler.yml (preferred) or legacy .wiki-compiler.json and
+# injects wiki context based on mode.
 
 set -euo pipefail
 
-# Walk up from $PWD to find .wiki-compiler.json
+# Walk up from $PWD to find .wiki-compiler.yml (preferred) or .json (legacy)
 config_file=""
+config_ext=""
 dir="$PWD"
 while [ "$dir" != "/" ]; do
+  if [ -f "$dir/.wiki-compiler.yml" ]; then
+    config_file="$dir/.wiki-compiler.yml"
+    config_ext="yml"
+    break
+  fi
   if [ -f "$dir/.wiki-compiler.json" ]; then
     config_file="$dir/.wiki-compiler.json"
+    config_ext="json"
     break
   fi
   dir="$(dirname "$dir")"
@@ -22,11 +30,34 @@ fi
 
 project_root="$(dirname "$config_file")"
 
-# Read config values using node
-output_path=$(node -e "const c=require('$config_file'); console.log(c.output || '')")
-mode=$(node -e "const c=require('$config_file'); console.log(c.mode || 'staging')")
-name=$(node -e "const c=require('$config_file'); console.log(c.name || 'Project')")
-wiki_mode=$(node -e "const c=require('$config_file'); console.log(c.mode === 'codebase' ? 'codebase' : 'knowledge')" 2>/dev/null || echo "knowledge")
+# Read a top-level scalar field from the config, handling both JSON and
+# YAML without requiring js-yaml. For YAML we only support top-level
+# scalars — the session-start hook doesn't need nested fields.
+get_config_field() {
+  local field=$1
+  local default=$2
+  if [ "$config_ext" = "json" ]; then
+    node -e "const c=require('$config_file'); console.log(c.$field || '$default')" 2>/dev/null || echo "$default"
+  else
+    # YAML: match `field: value` at line start, strip surrounding quotes.
+    local val
+    val=$(grep -E "^${field}:" "$config_file" | head -1 | sed -E "s/^${field}:[[:space:]]*//; s/^\"(.*)\"$/\1/; s/^'(.*)'$/\1/")
+    if [ -z "$val" ]; then
+      echo "$default"
+    else
+      echo "$val"
+    fi
+  fi
+}
+
+output_path=$(get_config_field output "")
+mode=$(get_config_field mode staging)
+name=$(get_config_field name Project)
+if [ "$mode" = "codebase" ]; then
+  wiki_mode=codebase
+else
+  wiki_mode=knowledge
+fi
 
 if [ -z "$output_path" ]; then
   exit 0
@@ -49,9 +80,12 @@ escape_for_json() {
 if [ ! -f "$index_file" ]; then
   context="[Wiki Compiler] Wiki configured for \"$name\" but not yet compiled. Run /wiki-compile to build your knowledge base."
 else
-  topic_count=$(node -e "const s=require('$state_file'); console.log((s.topics||[]).length)" 2>/dev/null || echo "?")
+  # `topics` is an object map (new schema) — count keys. Object.keys() also
+  # works on legacy array shape (returns numeric index keys), so this line
+  # is compatible with both.
+  topic_count=$(node -e "const s=require('$state_file'); console.log(Object.keys(s.topics||{}).length)" 2>/dev/null || echo "?")
   last_compiled=$(node -e "const s=require('$state_file'); console.log(s.last_compiled || 'unknown')" 2>/dev/null || echo "unknown")
-  auto_update=$(node -e "const c=require('$config_file'); console.log(c.auto_update || 'off')" 2>/dev/null || echo "off")
+  auto_update=$(get_config_field auto_update off)
 
   # Stale detection: count source files changed since last compile
   stale_warning=""
