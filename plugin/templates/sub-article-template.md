@@ -14,9 +14,9 @@ status: active
 
 # {Sub-topic Title}
 
-**{Sub-topic}** {one-sentence lead. What this is, in the context of the parent topic.}
+**{Sub-topic}** {is — present tense — a one-sentence definition scoped to the parent topic. The sub-topic name MUST appear in bold on its first mention and MUST be the grammatical subject of the opening sentence. No preamble, no "this page covers…", no hedging. Definition first.}
 
-{Second paragraph: purpose / context / current state. Link back to parent with [[topics/{parent-topic}]] somewhere in the lead.}
+{Second paragraph: 2-4 sentences of purpose, context, and why this sub-topic matters within the parent. Link back to the parent topic via [[topics/{parent-topic}]] in this paragraph, and use inline wikilinks for every other named entity. Avoid temporal words like "new", "recent", or "current". HARD CAP: the entire lead (all paragraphs before the first `##` heading) stays under 150 words. If the lead would be longer, move detail into a section.}
 
 ## {Section 1 — natural section from the source material}
 
@@ -47,10 +47,25 @@ status: active
 
 - [[../../../relative/path/to/source]]
 
-<!-- Same rules as hub articles apply:
-     - No coverage tags in headings
-     - No academic parentheticals
-     - Inline wikilinks for every named entity
-     - Images embedded from wiki/images/{parent-topic}/
-     - Encyclopedic tone, no temporal words
+<!-- Writing rules enforced at compile time (same as hub articles):
+     1. NO coverage tags like "[coverage: high -- 5 sources]" in section headings.
+        Coverage, if tracked, lives in frontmatter metadata only.
+     2. NO academic parenthetical citations like "(Cloud et al., arxiv 2410.04332)".
+        If citing a paper, link to a paper note: [[papers/gr-moe]] or footnote with
+        a clean external URL. Never inline "(Author et al., year)".
+     3. Every mention of a named entity that has its own source or sibling sub-page
+        MUST be a [[wikilink]], not just prose.
+     4. Sub-articles ARE the detail pages: full technical content, tables, code
+        blocks, and results are welcome. Unlike hub sections, length is not capped
+        here — but the LEAD still is (see rule 7).
+     5. Default tone is encyclopedic — descriptive, present tense, no first person,
+        no temporal words like "new", "recent", "current", "latest" in headings or
+        section titles (these go stale).
+     6. Embed images when source material includes relevant figures. Reference them
+        at ../../images/{parent-topic}/{filename}.
+     7. LEAD PARAGRAPH: The article's first paragraph is the lead. The topic
+        name MUST appear in **bold** on its first mention and MUST be the
+        subject of the opening sentence. The lead (everything before the
+        first `##` heading) MUST stay under 150 words. If content would push
+        it longer, move detail into a section and leave a concise summary.
 -->
