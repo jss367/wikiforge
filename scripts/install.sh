@@ -27,16 +27,11 @@ else
   echo "Quartz already at $QUARTZ — skipping clone."
 fi
 
-# Apply the overlay and (if needed) run npm install. One source of truth for
-# this logic, shared with wiki-serve.sh.
+# Apply the overlay and refresh dependencies. One source of truth for this
+# logic, shared with wiki-serve.sh — sync-overlay.sh runs npm install on a
+# fresh clone (no node_modules) or whenever package.json / package-lock.json
+# drift, so install.sh doesn't need its own dependency step.
 bash "$(dirname "$0")/sync-overlay.sh"
-
-# Force npm install on first setup even if package.json marker already matches —
-# a fresh Quartz clone has no node_modules yet.
-if [ ! -d "$QUARTZ/node_modules" ]; then
-  echo "Installing Quartz dependencies..."
-  (cd "$QUARTZ" && npm install)
-fi
 
 echo ""
 echo "Quartz setup complete."

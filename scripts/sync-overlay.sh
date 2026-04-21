@@ -13,7 +13,7 @@ QUARTZ="${QUARTZ:-$HOME/Documents/wiki-quartz}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OVERLAY="$REPO_ROOT/quartz-overlay"
 OVERLAY_MARKER="$QUARTZ/.wikiforge-overlay-hash"
-PACKAGE_MARKER="$QUARTZ/.wikiforge-package-hash"
+DEPS_MARKER="$QUARTZ/.wikiforge-deps-hash"
 
 if [ ! -d "$QUARTZ" ]; then
   echo "[wikiforge] Quartz not found at $QUARTZ — run scripts/install.sh first."
@@ -42,15 +42,21 @@ else
   echo "$current_hash" > "$OVERLAY_MARKER"
 fi
 
-# Run npm install only when the overlay's package.json actually changed. The
-# overlay doesn't currently ship a package.json, but if that ever changes this
-# gate keeps cold-start overhead flat.
-if [ -f "$OVERLAY/package.json" ]; then
-  current_pkg_hash=$(shasum "$OVERLAY/package.json" | awk '{print $1}')
-  stored_pkg_hash=$(cat "$PACKAGE_MARKER" 2>/dev/null || echo "")
-  if [ "$current_pkg_hash" != "$stored_pkg_hash" ]; then
-    echo "[wikiforge] package.json changed — running npm install"
-    (cd "$QUARTZ" && npm install)
-    echo "$current_pkg_hash" > "$PACKAGE_MARKER"
-  fi
+# Refresh Quartz dependencies when they drift. Hash the *effective* package
+# files after the overlay is applied, so this single gate catches:
+#   - Upstream Quartz updates that change package.json / package-lock.json
+#     (what `git pull` in $QUARTZ brings in)
+#   - Overlay-provided package.json, whenever the overlay starts shipping one
+#   - Missing node_modules (fresh clone, or someone cleaned it)
+deps_hash() {
+  shasum "$QUARTZ/package.json" "$QUARTZ/package-lock.json" 2>/dev/null | shasum | awk '{print $1}'
+}
+
+current_deps_hash=$(deps_hash)
+stored_deps_hash=$(cat "$DEPS_MARKER" 2>/dev/null || echo "")
+
+if [ ! -d "$QUARTZ/node_modules" ] || [ "$current_deps_hash" != "$stored_deps_hash" ]; then
+  echo "[wikiforge] Quartz deps out of date — running npm install"
+  (cd "$QUARTZ" && npm install)
+  echo "$current_deps_hash" > "$DEPS_MARKER"
 fi
