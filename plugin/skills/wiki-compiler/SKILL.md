@@ -9,15 +9,56 @@ This skill contains the 5-phase algorithm for compiling source files into a topi
 
 **Safety rule:** NEVER modify any file outside the configured output directory. Source files are read-only.
 
+**Exceptions (allowed writes outside the output directory):**
+- `.wiki-compiler.yml` and `.wiki-compiler.json` at the project root. The skill writes these only in two situations: (1) one-time JSON→YAML migration on first run if only the JSON file exists, and (2) appending a user-approved directive to `preferences` or `topics.<slug>.notes` via the "Learning from user feedback" loop. All other edits to source notes remain out of scope.
+
 ## Prerequisites
 
-Before running, read `.wiki-compiler.json` from the project root to get:
-- `mode` — "knowledge" (default, markdown files) or "codebase" (code repository)
-- `sources[]` — directories to scan (with optional `exclude` patterns)
-- `output` — where to write wiki articles
-- `name` — project/domain name for the wiki
-- `topic_hints[]` — optional seed topics from the user
-- `link_style` — "obsidian" (default) or "markdown"
+Before running, read the compiler config file from the project root. Prefer `.wiki-compiler.yml`; fall back to `.wiki-compiler.json` if the YAML file doesn't exist. If ONLY the JSON file exists, **migrate it**: parse it, re-emit as YAML at `.wiki-compiler.yml`, then delete the JSON file. The two formats share the same schema — YAML is preferred because it supports multi-line strings and comments, which the `preferences` and `topics.<slug>.notes` fields benefit from.
+
+**Config schema:**
+
+```yaml
+version: 2
+name: "Julius's Wiki"
+mode: knowledge          # or "codebase"
+sources:
+  - path: "./"
+    exclude: ["wiki/", "attachments/", ".obsidian/", ".trash/"]
+output: wiki/
+link_style: obsidian     # or "markdown"
+auto_update: prompt
+
+# Global editorial preferences — applied to EVERY topic's compile agent
+preferences:
+  - No academic parenthetical citations. Link to paper notes instead.
+  - Wikipedia-style inline wikilinks, dense linking.
+  - Short hub sections; push detail to sub-pages.
+
+# Per-topic directives — OPTIONAL. Claude infers sources/excludes from directory
+# structure by default. Use topics entries to override defaults or pass notes.
+topics:
+  gradient-routing:
+    sources: ["Gradient Routing/**"]     # optional override
+    exclude: ["Untitled 7.md"]           # optional topic-scoped exclude
+    notes:
+      - Keep the ablation table in spike-v3 prominent.
+      - Explain NAND routing before the spike sequence.
+      - Each spike (v1–v4) gets its own sub-page.
+
+article_sections:         # optional — overrides default article template
+  - { name: Summary, required: true }
+  - { name: Key Details }
+  - { name: Sources, required: true }
+
+topic_hints:              # optional seed topics for first compile
+  - gradient routing
+  - AI safety
+```
+
+**Legacy fields (still supported for backward compat on read; emit as YAML on migration):**
+- `article_sections` — override article structure
+- `topic_hints` — seed topic names for first compile
 
 **Codebase mode additional config:**
 - `service_discovery` — "auto" (detect monorepo vs single project) or "manual"
@@ -25,15 +66,70 @@ Before running, read `.wiki-compiler.json` from the project root to get:
 - `deep_scan` — `false` (default) or `true` (also read key source files for richer articles)
 - `code_extensions[]` — file extensions to consider as source code (e.g., `.ts`, `.py`, `.go`)
 
+**How config drives compilation:**
+
+The `preferences` list and `topics.<slug>.notes` list are passed verbatim to the agent prompt that compiles each topic. They behave like a persistent editorial voice the compiler respects. When the user gives editorial feedback during a session ("always include the X table", "don't mention Y"), the skill should offer to add that directive to the config so it's remembered across compiles. See "Learning from user feedback" at the bottom of this file.
+
 ## Phase 1: Scan Sources
 
 ### Knowledge mode (default)
 
 1. For each entry in `sources[]`, list all `.md` files using Glob
 2. Exclude any paths matching `exclude` patterns (e.g., the `wiki/` output directory itself)
-3. Read `.compile-state.json` from the output directory
-4. Compare file list against previous state to identify new or changed files
-5. On first run (no prior state), treat ALL files as new
+3. After Phase 2 classification, resolve each topic's final source set as follows:
+   - **If `topics.<slug>.sources` is set in config** — this is an explicit override. Use it as the authoritative source list for this topic. Ignore classification for those globs; files matching them belong to this topic regardless of heuristic. Files NOT matching any topic's override are still classified by content.
+   - Then apply `topics.<slug>.exclude` to remove files from that topic even if they matched.
+4. Read `.compile-state.json` from the output directory
+5. Compare file list against previous state to identify new or changed files
+6. On first run (no prior state), treat ALL files as new
+
+### Incremental-skip decision (per topic, evaluated before Phase 3)
+
+For each topic, decide RECOMPILE or SKIP. The decision must invalidate correctly on three independent axes: source-file set changes, source-file content changes, and config changes scoped to this topic.
+
+**State the skip decision needs (stored per topic in `.compile-state.json` from the last compile):**
+- `topics.<slug>.sources`: sorted list of source file paths included last compile
+- `topics.<slug>.config_hash`: hash of the config subtree that influenced this topic last compile — specifically `preferences` (global) + `topics.<slug>` (this topic's entry), including its `sources`, `exclude`, and `notes`
+
+**Plus one global state field:**
+- `schema_hash`: hash of schema-level fields that affect all topics — `article_sections`, `mode`, `output`, `link_style`, and any other cross-cutting config that changes what every compile emits
+
+**Global gates applied before the per-topic loop:**
+
+- If `--topic <slug>` was passed, restrict the entire compile to that one slug. Every other topic is skipped without any further evaluation. The per-topic loop below runs for exactly one topic, and step 2 below fires for it.
+- If `--force` was passed with no `--topic`, every topic enters the loop and hits step 2.
+
+**Decision (per topic in the restricted loop):**
+
+1. **No prior compile?** → RECOMPILE (first-run behavior).
+2. **`--force`, or `--topic <slug>` and this IS the targeted slug?** → RECOMPILE.
+3. **Schema change?** Compute the current `schema_hash` from config. If it differs from the stored `schema_hash` → RECOMPILE (applies to every topic; check this once at the start of the skip pass and, if changed, RECOMPILE every topic without running the remaining per-topic checks).
+4. **Source-set change?** Compute the current source set (after Phase 2 + per-topic sources/excludes resolution). If it differs from `topics.<slug>.sources` in the prior state — any addition, removal, or rename — → RECOMPILE. This catches deleted or renamed sources that would otherwise leave stale Sources entries.
+5. **Config-scope change?** Compute a fresh hash of `preferences` + `topics.<slug>` from the current config. If it differs from the stored `topics.<slug>.config_hash` → RECOMPILE *this topic only*. A change to one topic's `notes` does not invalidate other topics.
+6. **Source-content change?** For each current source, compare its `mtime` to the compiled hub's `mtime` at `{output}/topics/{slug}.md`. If any source is newer → RECOMPILE.
+7. **None of the above triggered?** → SKIP. Report as "unchanged, skipped".
+
+**Note on global config changes:**
+- A change to `preferences` (the global list) changes every topic's `config_hash` (since each hash includes `preferences`), so it correctly invalidates all topics.
+- A change to a single `topics.<slug>` entry only changes that topic's `config_hash`.
+- Schema-level changes (e.g. `article_sections`, `mode`, `output`) should invalidate all topics — include them in the hash or force a full recompile when they change.
+
+**Persisting the state (in Phase 5):**
+
+After each topic is compiled, update `.compile-state.json`:
+```json
+{
+  "topics": {
+    "gradient-routing": {
+      "sources": ["Gradient Routing/OVERVIEW.md", "..."],
+      "config_hash": "<hash>",
+      "last_compiled": "2026-04-20T12:34:56Z"
+    }
+  }
+}
+```
+
+This rule is important for a vault with many topics: only the ones that actually changed cost LLM tokens to recompile. A quiet day updates zero topics. A source deletion or a single `topics.<slug>.notes` entry only invalidates the one affected topic.
 
 ### Phase 1b: Image inventory
 
@@ -133,16 +229,38 @@ For each topic area, also read key source files to enrich understanding:
 
 ## Phase 3: Compile Topic Hub Articles
 
-For EACH topic that has new or changed source files:
+For EACH topic that has new or changed source files (i.e. not skipped by the Incremental-skip decision above):
 
 1. Read ALL source files classified under that topic (need full context, not just changed files)
 2. Write the topic **hub article** to `{output}/topics/{topic-slug}.md`
 3. **Determine article structure:**
-   - If `.wiki-compiler.json` has an `article_sections` array: use those sections in order. Each section's `description` field tells you what content belongs there.
+   - If the active config file (`.wiki-compiler.yml`, or legacy `.wiki-compiler.json` if YAML isn't present) defines an `article_sections` array: use those sections in order. Each section's `description` field tells you what content belongs there.
    - If `article_sections` is absent: fall back to `${CLAUDE_PLUGIN_ROOT}/templates/article-template.md`
 4. Fill every section with specific, factual content — no placeholders
 5. **Lead** is a Wikipedia-style 1-3 paragraph intro. No preamble; start with the topic name bolded and its definition.
 6. **Sources** lists every source file that contributed, using the configured link style
+
+### Editorial directives from config (include in EVERY agent prompt)
+
+Before dispatching a compile agent for a topic, assemble an **Editorial directives** section and include it near the top of the agent's prompt. Structure:
+
+```
+## Editorial directives
+
+Global preferences (from .wiki-compiler.yml `preferences`):
+- {preference 1}
+- {preference 2}
+...
+
+Topic-specific directives for `{topic-slug}` (from `topics.{slug}.notes`):
+- {note 1}
+- {note 2}
+...
+```
+
+If `preferences` is empty, omit the Global section. If the topic has no per-topic notes, omit the Topic-specific section. If both are empty, skip the whole Editorial directives block.
+
+These directives carry the user's accumulated editorial voice — structural preferences, what to emphasize, what to leave out. Agents should treat them as non-negotiable unless they conflict with a hard rule below (in which case the hard rule wins and the agent reports the conflict).
 
 ### Writing rules for hub articles (enforce during compilation)
 
@@ -326,15 +444,24 @@ Always regenerate index.md, even if no topics changed (it's cheap).
 **Sources changed:** {count}
 ```
 
-2. **Compile state** — Update `{output}/.compile-state.json`:
+2. **Compile state** — Update `{output}/.compile-state.json`. Per-topic tracking is required for the incremental-skip decision:
 ```json
 {
   "last_compiled": "{today's date}",
-  "topics": ["{slug1}", "{slug2}", ...],
+  "topics": {
+    "{slug1}": {
+      "sources": ["{path1}", "{path2}", ...],
+      "config_hash": "{hash of preferences + topics.slug1 subtree used this compile}",
+      "last_compiled": "{ISO timestamp}"
+    }
+  },
+  "schema_hash": "{hash of schema-level config — article_sections, mode, output, link_style — used this compile}",
   "source_locations": ["{path1}", "{path2}", ...],
   "total_sources_scanned": {count}
 }
 ```
+
+For topics that were skipped in this run, preserve their existing entry unchanged. For topics that recompiled, update `sources`, `config_hash`, and `last_compiled`. For topics no longer present (removed from schema by user), remove their entry.
 
 ## Phase 6: Generate CONTEXT.md (codebase mode only, first run)
 
@@ -369,7 +496,39 @@ After generating CONTEXT.md, **ask the user** (don't auto-modify): "Want me to a
 
 After compilation, show a summary to the user:
 - Topics created/updated (with article line counts)
+- Topics skipped as unchanged (mtime-based)
 - Total sources scanned
 - Any files that couldn't be classified
 - Any suggested new topics for next run
 - Time taken
+
+## Learning from user feedback
+
+Wiki pages are never edited directly by the user. All editorial influence flows through two channels: (1) changes to source notes, and (2) directives in `.wiki-compiler.yml`. Part of this skill's job is to keep the config in sync with the user's taste.
+
+**When to update the config:**
+
+When the user gives editorial feedback about wiki output in conversation — e.g. "that ablation table should always be in spike-v3," "drop the academic parens style in ai-policy," "lead gradient-routing with the image" — treat it as a config update request. Offer:
+
+```
+Want me to add this to .wiki-compiler.yml so it's remembered?
+  - Topic-specific:   topics.gradient-routing.notes += "Lead the hub with the spike-v3 ablation image."
+  - Or global:        preferences += "Lead hub articles with a representative image when available."
+```
+
+Ask which scope (topic-specific vs global) the user intends if it's ambiguous.
+
+**After updating the config:**
+
+1. Append the new directive to the relevant section of `.wiki-compiler.yml`
+2. Bump the config's mtime (it happens automatically via the write)
+3. Offer to recompile just the affected topic: `/wiki-compile --topic <slug>`
+4. If global, offer a full `/wiki-compile --force` but note the token cost
+
+**What to avoid:**
+
+- Don't auto-edit the config without asking — user should approve each directive.
+- Don't silently drop old directives. If a new directive contradicts an existing one, flag the conflict and ask the user to resolve.
+- Don't use the config for transient debugging directives ("just for this compile, also include X"). Those should be one-off agent instructions, not persisted.
+
+This loop — feedback → config → recompile — is the core UX. Over time, `.wiki-compiler.yml` becomes a living record of editorial preferences, and future compiles reproduce the user's voice without needing to re-explain it.

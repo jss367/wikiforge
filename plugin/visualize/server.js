@@ -9,6 +9,28 @@ const path = require('path');
 
 const PORT = 3848;
 
+// Minimal YAML scalar reader for top-level string fields. Handles
+// double-quoted, single-quoted, and unquoted values; strips inline
+// comments only on unquoted values so that quoted strings containing
+// "#" or trailing "# comment" after a quoted value are both safe.
+// Returns null if the field isn't present.
+function getYamlScalar(content, field) {
+  const line = content.split('\n').find(l => l.startsWith(field + ':'));
+  if (!line) return null;
+  let v = line.slice(field.length + 1).trim();
+  if (v.startsWith('"')) {
+    const m = v.match(/^"((?:[^"\\]|\\.)*)"/);
+    return m ? m[1] : null;
+  }
+  if (v.startsWith("'")) {
+    const m = v.match(/^'((?:[^']|'')*)'/);
+    return m ? m[1].replace(/''/g, "'") : null;
+  }
+  const commentAt = v.search(/\s+#/);
+  if (commentAt >= 0) v = v.slice(0, commentAt);
+  return v.trim();
+}
+
 // Parse CLI args
 let wikiDir = null;
 for (let i = 2; i < process.argv.length; i++) {
@@ -19,17 +41,27 @@ for (let i = 2; i < process.argv.length; i++) {
 }
 
 if (!wikiDir) {
-  // Try to find wiki dir from .wiki-compiler.json in cwd
-  const configPath = path.join(process.cwd(), '.wiki-compiler.json');
-  if (fs.existsSync(configPath)) {
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    wikiDir = path.resolve(process.cwd(), config.output || 'wiki/');
+  // Try to find wiki dir from .wiki-compiler.yml (preferred) or legacy
+  // .wiki-compiler.json in cwd. We only need the `output` field, so a
+  // tiny scalar parser is enough — avoids adding a js-yaml dependency.
+  const ymlPath = path.join(process.cwd(), '.wiki-compiler.yml');
+  const jsonPath = path.join(process.cwd(), '.wiki-compiler.json');
+  let output = null;
+  if (fs.existsSync(ymlPath)) {
+    const content = fs.readFileSync(ymlPath, 'utf8');
+    output = getYamlScalar(content, 'output') || 'wiki/';
+  } else if (fs.existsSync(jsonPath)) {
+    const config = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+    output = config.output || 'wiki/';
+  }
+  if (output) {
+    wikiDir = path.resolve(process.cwd(), output);
   }
 }
 
 if (!wikiDir || !fs.existsSync(wikiDir)) {
   console.error('Usage: node server.js --wiki-dir path/to/wiki/');
-  console.error('  Or run from a directory with .wiki-compiler.json');
+  console.error('  Or run from a directory with .wiki-compiler.yml (or legacy .wiki-compiler.json)');
   process.exit(1);
 }
 

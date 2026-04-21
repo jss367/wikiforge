@@ -42,7 +42,7 @@ When codebase mode is selected, use this streamlined flow instead of the standar
 
 ### Codebase Step 1: Check for existing config
 
-Same as standard Step 1 — check for `.wiki-compiler.json` and ask to reconfigure or abort.
+Same as standard Step 1 — check for `.wiki-compiler.yml` (or legacy `.wiki-compiler.json`) and ask to reconfigure or abort.
 
 ### Codebase Step 2: Auto-detect everything
 
@@ -95,39 +95,59 @@ If C: exit.
 
 ### Codebase Step 4: Create configuration
 
-Write `.wiki-compiler.json`:
+Write `.wiki-compiler.yml`:
 
-```json
-{
-  "version": 2,
-  "mode": "codebase",
-  "name": "{auto_detected_name}",
-  "sources": [
-    { "path": "./", "exclude": ["node_modules/", "dist/", ".git/", "wiki/", "vendor/", "__pycache__/", ".build/", "target/", ".next/", "coverage/"] }
-  ],
-  "output": "wiki/",
-  "service_discovery": "auto",
-  "knowledge_files": [
-    "README.md", "CLAUDE.md", "AGENTS.md", "ARCHITECTURE.md", "CONTRIBUTING.md",
-    "*.proto", "*.graphql", "openapi.yaml", "openapi.json",
-    "ADR-*.md", "docs/adr/*.md",
-    "docker-compose.yml", "Dockerfile",
-    ".env.example", "CHANGELOG.md"
-  ],
-  "deep_scan": false,
-  "auto_update": "prompt",
-  "article_sections": [
-    { "name": "Purpose", "description": "What this module/service does and who depends on it", "required": true },
-    { "name": "Architecture", "description": "Key files, structure, entry points" },
-    { "name": "Talks To", "description": "Dependencies, communication patterns, inter-service calls" },
-    { "name": "API Surface", "description": "Endpoints, exported functions, or interfaces exposed" },
-    { "name": "Data", "description": "Tables, collections, queues, caches, state owned" },
-    { "name": "Key Decisions", "description": "Why it was built this way, from ADRs and READMEs" },
-    { "name": "Gotchas", "description": "Known issues, edge cases, failure modes" },
-    { "name": "Sources", "description": "Backlinks to all contributing files", "required": true }
-  ],
-  "link_style": "markdown"
-}
+```yaml
+version: 2
+mode: codebase
+name: "{auto_detected_name}"
+sources:
+  - path: "./"
+    exclude:
+      ["node_modules/", "dist/", ".git/", "wiki/", "vendor/", "__pycache__/",
+       ".build/", "target/", ".next/", "coverage/"]
+output: wiki/
+service_discovery: auto
+knowledge_files:
+  - "README.md"
+  - "CLAUDE.md"
+  - "AGENTS.md"
+  - "ARCHITECTURE.md"
+  - "CONTRIBUTING.md"
+  - "*.proto"
+  - "*.graphql"
+  - "openapi.yaml"
+  - "openapi.json"
+  - "ADR-*.md"
+  - "docs/adr/*.md"
+  - "docker-compose.yml"
+  - "Dockerfile"
+  - ".env.example"
+  - "CHANGELOG.md"
+deep_scan: false
+auto_update: prompt
+link_style: markdown
+preferences: []
+topics: {}
+article_sections:
+  - name: Purpose
+    description: What this module/service does and who depends on it
+    required: true
+  - name: Architecture
+    description: "Key files, structure, entry points"
+  - name: Talks To
+    description: "Dependencies, communication patterns, inter-service calls"
+  - name: API Surface
+    description: "Endpoints, exported functions, or interfaces exposed"
+  - name: Data
+    description: "Tables, collections, queues, caches, state owned"
+  - name: Key Decisions
+    description: "Why it was built this way, from ADRs and READMEs"
+  - name: Gotchas
+    description: "Known issues, edge cases, failure modes"
+  - name: Sources
+    description: Backlinks to all contributing files
+    required: true
 ```
 
 ### Codebase Step 5: Create output directory and compile
@@ -163,7 +183,7 @@ Want me to add a reference to wiki/CONTEXT.md in your CLAUDE.md?
 
 ### Step 1: Check for existing config
 
-Look for `.wiki-compiler.json` in the current project root. If it exists:
+Look for `.wiki-compiler.yml` (or legacy `.wiki-compiler.json`) in the current project root. If it exists:
 
 ```
 You already have a wiki configured for "{name}" ({topic_count} topics, last compiled {date}).
@@ -272,7 +292,7 @@ A) Staging — wiki supplements your existing setup, no changes needed (recommen
 B) Recommended — Claude reads wiki before raw files
 C) Primary — wiki is the main knowledge source, raw files only for detail
 
-You can change this anytime in .wiki-compiler.json.
+You can change this anytime in .wiki-compiler.yml.
 ```
 
 Wait for response.
@@ -293,30 +313,47 @@ If A, set `auto_update` to `"prompt"`. If B, set to `"off"`.
 
 ### Step 8: Create configuration
 
-Write `.wiki-compiler.json` to the project root:
+Write `.wiki-compiler.yml` to the project root:
 
-```json
-{
-  "version": 1,
-  "name": "{name}",
-  "sources": [
-    { "path": "{path1}/", "exclude": ["wiki/"] },
-    { "path": "{path2}/" }
-  ],
-  "output": "{output_path}/",
-  "mode": "{selected_mode}",
-  "auto_update": "{selected_auto_update}",
-  "article_sections": [
-    { "name": "Summary", "description": "{description}", "required": true },
-    { "name": "{section2}", "description": "{description}" },
-    { "name": "{section3}", "description": "{description}" },
-    { "name": "{section4}", "description": "{description}" },
-    { "name": "{section5}", "description": "{description}" },
-    { "name": "Sources", "description": "backlinks to all contributing source files", "required": true }
-  ],
-  "topic_hints": [],
-  "link_style": "obsidian"
-}
+```yaml
+version: 2
+name: "{name}"
+mode: "{selected_mode}"
+sources:
+  - path: "{path1}/"
+    exclude: ["wiki/"]
+  - path: "{path2}/"
+output: "{output_path}/"
+auto_update: "{selected_auto_update}"
+link_style: obsidian
+topic_hints: []
+# Global editorial preferences applied to every topic compile. Populate as
+# you build up editorial taste; empty is fine on first init.
+preferences: []
+# Per-topic overrides and directives. Populate as you notice editorial
+# patterns you want the compiler to remember. Example:
+#   topics:
+#     gradient-routing:
+#       sources: ["Gradient Routing/**"]
+#       exclude: ["Untitled*.md"]
+#       notes:
+#         - Keep the ablation table in spike-v3 prominent.
+topics: {}
+article_sections:
+  - name: Summary
+    description: "{description}"
+    required: true
+  - name: "{section2}"
+    description: "{description}"
+  - name: "{section3}"
+    description: "{description}"
+  - name: "{section4}"
+    description: "{description}"
+  - name: "{section5}"
+    description: "{description}"
+  - name: Sources
+    description: "backlinks to all contributing source files"
+    required: true
 ```
 
 ### Step 9: Create output directory
@@ -343,5 +380,5 @@ Next steps:
   2. Open {output_path}/index.md in Obsidian to browse
   3. After compiling, run /wiki-migrate to switch your AGENTS.md to wiki-first
 
-Edit .wiki-compiler.json anytime to adjust settings.
+Edit .wiki-compiler.yml anytime to adjust settings.
 ```
