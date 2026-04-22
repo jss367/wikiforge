@@ -1,4 +1,4 @@
-# Upgrade Wiki Compiler Plugin
+# Upgrade Wikiforge Plugin
 
 Update the plugin to the latest version from GitHub.
 
@@ -6,7 +6,7 @@ Update the plugin to the latest version from GitHub.
 
 1. **Find the plugin source directory** by running:
    ```bash
-   find ~/.claude/plugins -name "llm-wiki-compiler" -type d 2>/dev/null | head -1
+   find ~/.claude/plugins -name "wikiforge" -type d 2>/dev/null | head -1
    ```
 
 2. **Pull the latest changes:**
@@ -30,6 +30,6 @@ Update the plugin to the latest version from GitHub.
 
 If the plugin was installed from marketplace (not a git clone), tell the user:
 ```
-Run: claude plugin update llm-wiki-compiler
+Run: claude plugin update wikiforge
 Then restart Claude Code.
 ```
