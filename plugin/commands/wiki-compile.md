@@ -4,7 +4,7 @@ Compile all configured markdown source files into a topic-based wiki.
 
 ## Instructions
 
-1. **Read configuration** from `.wiki-compiler.yml` at the project root. If the file doesn't exist, tell the user to run `/wiki-init` first.
+1. **Read configuration** from `.wiki-compiler.yml` at the project root. If the file doesn't exist, offer to run `/wiki-init` now. If the user agrees, run init inline and continue with the compile once it finishes; only bail if the user declines.
 
 2. **Validate configuration:**
    - `sources[]` must have at least one entry
