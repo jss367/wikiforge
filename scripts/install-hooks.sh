@@ -30,16 +30,37 @@ if ! git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
   exit 0
 fi
 
-# Read core.hooksPath once, restricted to repo-LOCAL scope. `--get`
-# alone reads local + global + system, which would pick up a developer's
-# global hooksPath (e.g. for a husky-style shared hook dir) and make us
-# write symlinks into that shared directory — affecting every repo on
-# their machine. Only respect an explicit per-repo setting; users who
-# genuinely want wikiforge's hook in a shared dir can `git config
-# --local core.hooksPath ...` in this checkout. `--path` expands "~"
-# and other path-specific config forms the same way git does at
-# hook-execution time.
+# Resolve core.hooksPath in two steps. Naively calling `git config --get`
+# reads local + global + system and returns any of them — which means a
+# developer with a global hooksPath (e.g. for a husky-style shared hook
+# dir) would have us symlink into that shared directory and affect every
+# repo on their machine. Restricting to `--local` avoids clobbering, but
+# then silently no-op's when git itself would execute hooks from the
+# global path — the user gets a "successfully installed" message and
+# the hook never runs. Neither is right.
+#
+# Policy: trust a repo-local core.hooksPath implicitly (it's scoped to
+# this repo). If a global/system hooksPath exists without a local one,
+# print clear guidance and bail instead of silently installing somewhere
+# that either won't be read or will affect unrelated repos.
+#
+# `--path` expands "~" and other path-specific config forms the same way
+# git does at hook-execution time.
 CUSTOM_HOOKS=$(git -C "$REPO_ROOT" config --local --path --get core.hooksPath 2>/dev/null || true)
+if [ -z "$CUSTOM_HOOKS" ]; then
+  INHERITED_HOOKS=$(git -C "$REPO_ROOT" config --path --get core.hooksPath 2>/dev/null || true)
+  if [ -n "$INHERITED_HOOKS" ]; then
+    echo "[wikiforge] core.hooksPath is set in global/system git config to: $INHERITED_HOOKS"
+    echo "[wikiforge] Git will execute hooks from that shared directory, so an install into \$GIT_DIR/hooks"
+    echo "[wikiforge] would be inert and an install into the shared dir would affect every repo on your"
+    echo "[wikiforge] machine. Skipping — to enable the wikiforge auto-bump here, choose one:"
+    echo "[wikiforge]   (a) scope it to this repo:   git -C $REPO_ROOT config --local core.hooksPath .githooks"
+    echo "[wikiforge]       then re-run:             bash $REPO_ROOT/scripts/install-hooks.sh"
+    echo "[wikiforge]   (b) wire it into your shared dir manually:"
+    echo "[wikiforge]       ln -sf $REPO_ROOT/scripts/bump-plugin-version.sh $INHERITED_HOOKS/pre-commit"
+    exit 0
+  fi
+fi
 
 install_hook_in_worktree() {
   # Install the pre-commit symlink inside one worktree.
