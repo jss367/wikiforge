@@ -19,6 +19,17 @@ set -e
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+# Must be inside a git checkout before reading any config. `git config
+# --get` falls back to global + system scopes when there's no repo-local
+# config, so running install-hooks from a tarball extraction with a
+# global `core.hooksPath` set would otherwise make us write symlinks
+# into the user's global hooks directory — affecting every repo on
+# their machine. Bail before that can happen.
+if ! git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+  echo "[wikiforge] $REPO_ROOT is not a git checkout — skipping hook install"
+  exit 0
+fi
+
 # Read core.hooksPath once — it's stored in $GIT_COMMON_DIR/config and
 # shared across worktrees. `--path` expands "~" and other path-specific
 # config forms the same way git does at hook-execution time.
