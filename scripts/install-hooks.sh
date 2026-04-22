@@ -30,10 +30,16 @@ if ! git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
   exit 0
 fi
 
-# Read core.hooksPath once — it's stored in $GIT_COMMON_DIR/config and
-# shared across worktrees. `--path` expands "~" and other path-specific
-# config forms the same way git does at hook-execution time.
-CUSTOM_HOOKS=$(git -C "$REPO_ROOT" config --path --get core.hooksPath 2>/dev/null || true)
+# Read core.hooksPath once, restricted to repo-LOCAL scope. `--get`
+# alone reads local + global + system, which would pick up a developer's
+# global hooksPath (e.g. for a husky-style shared hook dir) and make us
+# write symlinks into that shared directory — affecting every repo on
+# their machine. Only respect an explicit per-repo setting; users who
+# genuinely want wikiforge's hook in a shared dir can `git config
+# --local core.hooksPath ...` in this checkout. `--path` expands "~"
+# and other path-specific config forms the same way git does at
+# hook-execution time.
+CUSTOM_HOOKS=$(git -C "$REPO_ROOT" config --local --path --get core.hooksPath 2>/dev/null || true)
 
 install_hook_in_worktree() {
   # Install the pre-commit symlink inside one worktree.
