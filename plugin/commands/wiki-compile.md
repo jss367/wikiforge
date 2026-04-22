@@ -4,7 +4,10 @@ Compile all configured markdown source files into a topic-based wiki.
 
 ## Instructions
 
-1. **Read configuration** from `.wiki-compiler.yml` at the project root. If the file doesn't exist, offer to run `/wiki-init` now; only bail if the user declines. If they accept, run init inline, then continue with the compile — **unless init already compiled** (codebase mode Step 3 option A, in `plugin/commands/wiki-init.md`, creates the config and runs `/wiki-compile` as part of its own flow). In that case, surface init's compile summary and stop here rather than re-running the same compile.
+1. **Read configuration** from `.wiki-compiler.yml` at the project root. If the file doesn't exist, offer to run `/wiki-init` now. If the user declines, bail. If they accept, run init inline and then branch on the outcome:
+   - **Config created, init already compiled** (codebase mode Step 3 option A in `plugin/commands/wiki-init.md` creates the config and runs `/wiki-compile` as part of its own flow) — surface init's compile summary and stop; don't re-run the compile.
+   - **Config created, init did not compile** (knowledge mode; codebase mode option B) — re-read the config and continue to step 2.
+   - **Config not created** (user canceled inside init — e.g. codebase mode option C, or any "keep current setup" / abort branch) — stop cleanly with an "aborted" message; don't attempt to compile without config.
 
 2. **Validate configuration:**
    - `sources[]` must have at least one entry
