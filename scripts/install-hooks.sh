@@ -30,23 +30,23 @@ if ! git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
   exit 0
 fi
 
-# Resolve core.hooksPath in two steps. Naively calling `git config --get`
-# reads local + global + system and returns any of them — which means a
-# developer with a global hooksPath (e.g. for a husky-style shared hook
-# dir) would have us symlink into that shared directory and affect every
-# repo on their machine. Restricting to `--local` avoids clobbering, but
-# then silently no-op's when git itself would execute hooks from the
-# global path — the user gets a "successfully installed" message and
-# the hook never runs. Neither is right.
-#
-# Policy: trust a repo-local core.hooksPath implicitly (it's scoped to
-# this repo). If a global/system hooksPath exists without a local one,
-# print clear guidance and bail instead of silently installing somewhere
-# that either won't be read or will affect unrelated repos.
+# Resolve core.hooksPath with scope awareness. Three possible states:
+#   - Repo-scoped (local OR worktree via extensions.worktreeConfig):
+#     trusted as an explicit per-repo choice, install there.
+#   - Only global / system: git would execute hooks from that shared
+#     dir, but writing into it would affect every repo on the machine.
+#     Print guidance and skip rather than silently clobber or install
+#     somewhere git won't read.
+#   - Unset entirely: default to $GIT_COMMON_DIR/hooks.
 #
 # `--path` expands "~" and other path-specific config forms the same way
 # git does at hook-execution time.
 CUSTOM_HOOKS=$(git -C "$REPO_ROOT" config --local --path --get core.hooksPath 2>/dev/null || true)
+if [ -z "$CUSTOM_HOOKS" ]; then
+  # `--worktree` only works when extensions.worktreeConfig is enabled;
+  # suppress errors and treat missing as empty.
+  CUSTOM_HOOKS=$(git -C "$REPO_ROOT" config --worktree --path --get core.hooksPath 2>/dev/null || true)
+fi
 if [ -z "$CUSTOM_HOOKS" ]; then
   INHERITED_HOOKS=$(git -C "$REPO_ROOT" config --path --get core.hooksPath 2>/dev/null || true)
   if [ -n "$INHERITED_HOOKS" ]; then
@@ -67,6 +67,16 @@ install_hook_in_worktree() {
   local worktree="$1"
   local hook_src="$worktree/scripts/bump-plugin-version.sh"
   local hooks_dir hook_dst existing_target hooks_common
+
+  # Skip worktrees whose branch doesn't have the hook script (e.g. a
+  # worktree pinned to an old revision from before wikiforge added the
+  # hook, or a worktree on an unrelated branch). Without this check the
+  # later `chmod` would fail under `set -e` and abort the whole install,
+  # including for the worktrees that ARE eligible.
+  if [ ! -f "$hook_src" ]; then
+    echo "[wikiforge] $hook_src not found — skipping $worktree"
+    return 0
+  fi
 
   if [ -n "$CUSTOM_HOOKS" ]; then
     hooks_dir="$CUSTOM_HOOKS"
