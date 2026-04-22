@@ -10,13 +10,29 @@ const defaultOptions: EditInObsidianOptions = {
 
 // Build the vault-root-relative path that Obsidian's `obsidian://open?file=`
 // expects. Quartz gives us `relativePath` (relative to the `-d` content dir)
-// and `filePath` (absolute). When wikiforge serves the compiled wiki via
-// `-d $VAULT/wiki`, `relativePath` omits the `wiki/` prefix that the vault
-// root needs — detect that case by looking at what `filePath - relativePath`
-// ends with, and restore the prefix.
-function vaultRootRelative(filePath: string, relativePath: string): string {
-  const contentDir = filePath.slice(0, filePath.length - relativePath.length)
-  return contentDir.endsWith("/wiki/") ? `wiki/${relativePath}` : relativePath
+// and `filePath` (absolute). When Quartz is served from a subfolder of the
+// vault (e.g. `-d $VAULT/wiki` or `-d $VAULT/compiled`), `relativePath` omits
+// that subfolder prefix — reconstruct it from `filePath - relativePath`.
+// Separators are normalized so Windows paths parse the same as POSIX.
+function vaultRootRelative(
+  filePath: string,
+  relativePath: string,
+  vaultName: string,
+): string {
+  const normalizedFilePath = filePath.replace(/\\/g, "/")
+  const normalizedRelativePath = relativePath.replace(/\\/g, "/")
+  const contentDir = normalizedFilePath.slice(
+    0,
+    normalizedFilePath.length - normalizedRelativePath.length,
+  )
+  // Last non-empty path segment of the content dir. In subfolder mode this is
+  // the prefix Obsidian needs; in raw mode (`-d $VAULT`) it's the vault
+  // folder itself — assume a convention that the vault folder is named to
+  // match `vaultName` and skip the prefix in that case.
+  const segments = contentDir.split("/").filter(Boolean)
+  const lastSegment = segments[segments.length - 1]
+  if (!lastSegment || lastSegment === vaultName) return normalizedRelativePath
+  return `${lastSegment}/${normalizedRelativePath}`
 }
 
 export default ((opts?: Partial<EditInObsidianOptions>) => {
@@ -28,7 +44,7 @@ export default ((opts?: Partial<EditInObsidianOptions>) => {
     // Tag / folder index pages don't have a backing file — render nothing.
     if (!filePath || !relativePath) return null
 
-    const openPath = vaultRootRelative(filePath, relativePath)
+    const openPath = vaultRootRelative(filePath, relativePath, options.vaultName)
     const url = `obsidian://open?vault=${encodeURIComponent(options.vaultName)}&file=${encodeURIComponent(openPath)}`
 
     return (
