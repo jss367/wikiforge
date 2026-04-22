@@ -12,25 +12,31 @@ set -e
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HOOK_SRC="$REPO_ROOT/scripts/bump-plugin-version.sh"
 
-# Resolve the common hooks dir so the hook applies across all worktrees.
-# Falls through quietly if this isn't a git checkout. `git rev-parse
-# --git-common-dir` can return a relative path (e.g. ".git"), so resolve
-# it against $REPO_ROOT before testing — running `install.sh` from outside
-# the repo is common, and we don't want to silently no-op in that case.
-HOOKS_COMMON=$(git -C "$REPO_ROOT" rev-parse --git-common-dir 2>/dev/null || true)
-if [ -z "$HOOKS_COMMON" ]; then
-  echo "[wikiforge] not a git checkout — skipping hook install"
-  exit 0
+# Resolve where git actually executes hooks from.
+#
+# Respect `core.hooksPath` when set (husky/lefthook and other shared hook
+# setups rely on it — git won't run hooks from $GIT_COMMON_DIR/hooks if
+# that config is present). Fall back to the common git dir so the hook
+# applies across all worktrees when no custom path is configured.
+#
+# Both paths can be returned relative (e.g. ".git"), so resolve against
+# $REPO_ROOT before testing — running `install.sh` from outside the repo
+# is common, and we don't want to silently no-op in that case.
+CUSTOM_HOOKS=$(git -C "$REPO_ROOT" config --get core.hooksPath 2>/dev/null || true)
+if [ -n "$CUSTOM_HOOKS" ]; then
+  HOOKS_DIR="$CUSTOM_HOOKS"
+else
+  HOOKS_COMMON=$(git -C "$REPO_ROOT" rev-parse --git-common-dir 2>/dev/null || true)
+  if [ -z "$HOOKS_COMMON" ]; then
+    echo "[wikiforge] not a git checkout — skipping hook install"
+    exit 0
+  fi
+  HOOKS_DIR="$HOOKS_COMMON/hooks"
 fi
-case "$HOOKS_COMMON" in
+case "$HOOKS_DIR" in
   /*) ;;                              # already absolute
-  *)  HOOKS_COMMON="$REPO_ROOT/$HOOKS_COMMON" ;;
+  *)  HOOKS_DIR="$REPO_ROOT/$HOOKS_DIR" ;;
 esac
-if [ ! -d "$HOOKS_COMMON" ]; then
-  echo "[wikiforge] common git dir not found at $HOOKS_COMMON — skipping hook install"
-  exit 0
-fi
-HOOKS_DIR="$HOOKS_COMMON/hooks"
 mkdir -p "$HOOKS_DIR"
 HOOK_DST="$HOOKS_DIR/pre-commit"
 

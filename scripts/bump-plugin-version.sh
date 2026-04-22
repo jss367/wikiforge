@@ -55,31 +55,57 @@ parse_version() {
     | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)"$/\1/'
 }
 
+# Parse the version from the INDEX (the state that will actually be
+# committed), not the working tree. A developer may stage an unrelated
+# plugin/ change while leaving an unstaged manual version edit in
+# plugin.json; reading the working tree would misread that unstaged edit
+# as "branch already bumped" and skip, letting the commit land with the
+# index's (unchanged) version. Sourcing from the index ties the check to
+# what's actually about to be committed.
 BASE_VERSION=$(git show "$BASE:$MANIFEST" 2>/dev/null | parse_version || true)
-CURRENT=$(parse_version < "$MANIFEST" || true)
-if [ -z "$CURRENT" ]; then
-  echo "[wikiforge] ERROR: could not parse version from $MANIFEST" >&2
+INDEX_BLOB=$(git show ":0:$MANIFEST" 2>/dev/null || true)
+if [ -z "$INDEX_BLOB" ]; then
+  # plugin.json not in the index — something's wrong. Bail rather than
+  # fabricate one.
+  exit 0
+fi
+INDEX_VERSION=$(echo "$INDEX_BLOB" | parse_version || true)
+if [ -z "$INDEX_VERSION" ]; then
+  echo "[wikiforge] ERROR: could not parse version from staged $MANIFEST" >&2
   exit 1
 fi
 
-# Compare actual version values, not diff-line presence. A formatter that
-# rewrites plugin.json without changing the version number produces a
-# "+version: X" line in the raw diff even though X is unchanged — the
-# previous line-based skip check misread that as "already bumped" and
-# silently let plugin-touching commits through without a real bump.
-if [ -n "$BASE_VERSION" ] && [ "$BASE_VERSION" != "$CURRENT" ]; then
+# Skip when the index's version already differs from merge-base — the
+# branch already bumped (in a prior commit or an explicit staged edit).
+# Compare values, not diff-line text, so a format-only rewrite with the
+# same version value still bumps normally.
+if [ -n "$BASE_VERSION" ] && [ "$BASE_VERSION" != "$INDEX_VERSION" ]; then
   exit 0
 fi
 
-IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+IFS='.' read -r MAJOR MINOR PATCH <<< "$INDEX_VERSION"
 NEW="$MAJOR.$MINOR.$((PATCH + 1))"
 
-# Portable in-place sed (macOS vs GNU).
-if [[ "$OSTYPE" == darwin* ]]; then
-  sed -i '' -E "s/\"version\"[[:space:]]*:[[:space:]]*\"$CURRENT\"/\"version\": \"$NEW\"/" "$MANIFEST"
-else
-  sed -i -E "s/\"version\"[[:space:]]*:[[:space:]]*\"$CURRENT\"/\"version\": \"$NEW\"/" "$MANIFEST"
+# Bump the INDEX directly so the committed blob has the new version
+# regardless of any unstaged working-tree state. Write a new blob, then
+# point the index entry at it.
+NEW_BLOB_HASH=$(echo "$INDEX_BLOB" \
+  | sed -E "s/\"version\"[[:space:]]*:[[:space:]]*\"$INDEX_VERSION\"/\"version\": \"$NEW\"/" \
+  | git hash-object -w --stdin)
+git update-index --cacheinfo 100644,"$NEW_BLOB_HASH","$MANIFEST"
+
+# Also bump the working tree, but only when it matches the old index
+# version — i.e. the developer had no unstaged plugin.json edit. If they
+# did, leave their working copy alone; the index bump already ensures
+# the commit is correct, and clobbering their unstaged edit would be
+# surprising.
+WT_VERSION=$(parse_version < "$MANIFEST" 2>/dev/null || true)
+if [ "$WT_VERSION" = "$INDEX_VERSION" ]; then
+  if [[ "$OSTYPE" == darwin* ]]; then
+    sed -i '' -E "s/\"version\"[[:space:]]*:[[:space:]]*\"$INDEX_VERSION\"/\"version\": \"$NEW\"/" "$MANIFEST"
+  else
+    sed -i -E "s/\"version\"[[:space:]]*:[[:space:]]*\"$INDEX_VERSION\"/\"version\": \"$NEW\"/" "$MANIFEST"
+  fi
 fi
 
-git add "$MANIFEST"
-echo "[wikiforge] bumped plugin version: $CURRENT → $NEW" >&2
+echo "[wikiforge] bumped plugin version: $INDEX_VERSION → $NEW" >&2
