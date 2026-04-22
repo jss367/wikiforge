@@ -22,7 +22,10 @@ HOOK_SRC="$REPO_ROOT/scripts/bump-plugin-version.sh"
 # Both paths can be returned relative (e.g. ".git"), so resolve against
 # $REPO_ROOT before testing — running `install.sh` from outside the repo
 # is common, and we don't want to silently no-op in that case.
-CUSTOM_HOOKS=$(git -C "$REPO_ROOT" config --get core.hooksPath 2>/dev/null || true)
+# `--path` expands "~" and other path-specific config forms the same way
+# git does when it actually runs hooks — otherwise a hooksPath of
+# "~/.githooks" would get read literally and resolved against REPO_ROOT.
+CUSTOM_HOOKS=$(git -C "$REPO_ROOT" config --path --get core.hooksPath 2>/dev/null || true)
 if [ -n "$CUSTOM_HOOKS" ]; then
   HOOKS_DIR="$CUSTOM_HOOKS"
 else
@@ -40,8 +43,25 @@ esac
 mkdir -p "$HOOKS_DIR"
 HOOK_DST="$HOOKS_DIR/pre-commit"
 
-# If there's already a non-symlink pre-commit hook, don't clobber it.
-if [ -e "$HOOK_DST" ] && [ ! -L "$HOOK_DST" ]; then
+# Don't clobber existing hooks. Three cases to distinguish:
+#   1. Nothing exists — install our symlink.
+#   2. Symlink already points at our hook (re-run of this script, common) —
+#      refresh it to be safe.
+#   3. Something else exists (non-symlink file, or a symlink to a different
+#      hook) — leave it alone and print instructions. The third case
+#      matters especially when core.hooksPath points at a shared/global
+#      directory (e.g. ~/.githooks), where silently overwriting a symlink
+#      from another hook manager would break that manager's behavior
+#      across every repo using it.
+if [ -L "$HOOK_DST" ]; then
+  EXISTING_TARGET=$(readlink "$HOOK_DST")
+  if [ "$EXISTING_TARGET" != "$HOOK_SRC" ]; then
+    echo "[wikiforge] $HOOK_DST is a symlink to a different hook ($EXISTING_TARGET) — leaving it alone."
+    echo "[wikiforge] To also run the wikiforge version auto-bump, either re-point it or invoke both from a wrapper:"
+    echo "[wikiforge]   $HOOK_SRC"
+    exit 0
+  fi
+elif [ -e "$HOOK_DST" ]; then
   echo "[wikiforge] $HOOK_DST exists and is not a symlink — leaving it alone."
   echo "[wikiforge] To enable the version auto-bump, merge this logic into your existing hook:"
   echo "[wikiforge]   $HOOK_SRC"
