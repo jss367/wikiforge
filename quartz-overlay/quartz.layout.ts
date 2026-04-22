@@ -5,11 +5,14 @@ import LastEdited from "./quartz/components/LastEdited"
 
 // Title-cases Explorer node display names. Inlined because Quartz serializes
 // this with .toString() and runs it in the browser — it cannot close over
-// anything in this file.
+// anything in this file. Keep the transform in sync with ArticleTitle's
+// `toTitleCase` so the sidebar and the page H1 render the same string.
 const titleCaseExplorer = (node: { displayName: string }) => {
   const raw = node.displayName
   const hasSpaces = /\s/.test(raw)
-  const spaced = hasSpaces ? raw : raw.replace(/[-_]+/g, " ")
+  // Underscore → dot so `spike-v4_5` renders `Spike V4.5` (matches the
+  // authored meaning). Hyphen → space so word boundaries title-case cleanly.
+  const spaced = hasSpaces ? raw : raw.replace(/_/g, ".").replace(/-/g, " ")
   node.displayName = spaced
     .split(/\s+/)
     .filter(Boolean)
