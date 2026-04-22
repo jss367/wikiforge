@@ -90,10 +90,13 @@ For each topic, decide RECOMPILE or SKIP. The decision must invalidate correctly
 **State the skip decision needs (stored per topic in `.compile-state.json` from the last compile):**
 - `topics.<slug>.sources`: sorted list of source file paths included last compile
 - `topics.<slug>.config_hash`: hash of the config subtree that influenced this topic last compile — specifically `preferences` (global) + `topics.<slug>` (this topic's entry), including its `sources`, `exclude`, and `notes`
-- `topics.<slug>.plugin_version`: the `version` field from `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` when *this topic* was last compiled
-- `topics.<slug>.skill_hash`: SHA-256 (first 16 hex chars is fine) of `${CLAUDE_PLUGIN_ROOT}/skills/wiki-compiler/SKILL.md` when *this topic* was last compiled. Catches heuristic changes that ship without a version bump.
+- `topics.<slug>.compiler_hash`: SHA-256 (first 16 hex chars) of the files that determine compiler behavior when *this topic* was last compiled. Hash over every file matching these globs under `${CLAUDE_PLUGIN_ROOT}`, in sorted path order:
+  - `skills/wiki-compiler/SKILL.md` — compilation algorithm
+  - `templates/*.md` — article/sub-article/schema templates
+  - `commands/wiki-compile.md` — orchestrator prompt
+  Recipe: `{ for f in <sorted paths>; do shasum -a 256 "$f"; done; } | shasum -a 256 | cut -c1-16`. Any edit to compiler logic, templates, or the compile orchestrator changes this hash automatically — no version bump required.
 
-These compiler-identity fields are stored **per topic**, not globally. A topic that didn't recompile in the last run retains its old `plugin_version`/`skill_hash`, so the next compile still detects the mismatch for that specific topic — the signal survives scoped `--topic` runs.
+The `compiler_hash` is stored **per topic**, not globally. A topic that didn't recompile in the last run retains its old hash, so the next compile still detects the mismatch for that specific topic — the signal survives scoped `--topic` runs.
 
 **Plus one global state field:**
 - `schema_hash`: hash of schema-level fields that affect all topics — `article_sections`, `mode`, `output`, `link_style`, and any other cross-cutting config that changes what every compile emits
@@ -107,7 +110,7 @@ These compiler-identity fields are stored **per topic**, not globally. A topic t
 
 1. **No prior compile?** → RECOMPILE (first-run behavior).
 2. **`--force`, or `--topic <slug>` and this IS the targeted slug?** → RECOMPILE.
-3. **Compiler change?** Read the current plugin version and compute the current skill hash. If either differs from this topic's stored `plugin_version` or `skill_hash` → RECOMPILE. This is what propagates heuristic changes retroactively: a topic compiled under old rules keeps its old stored values until it's re-evaluated under the new ones.
+3. **Compiler change?** Compute the current `compiler_hash`. If it differs from this topic's stored `compiler_hash` → RECOMPILE. This is what propagates heuristic changes retroactively: a topic compiled under old rules keeps its old stored hash until it's re-evaluated under the new ones.
 4. **Schema change?** Compute the current `schema_hash` from config. If it differs from the stored `schema_hash` → RECOMPILE (applies to every topic; check this once at the start of the skip pass and, if changed, RECOMPILE every topic without running the remaining per-topic checks).
 5. **Source-set change?** Compute the current source set (after Phase 2 + per-topic sources/excludes resolution). If it differs from `topics.<slug>.sources` in the prior state — any addition, removal, or rename — → RECOMPILE. This catches deleted or renamed sources that would otherwise leave stale Sources entries.
 6. **Config-scope change?** Compute a fresh hash of `preferences` + `topics.<slug>` from the current config. If it differs from the stored `topics.<slug>.config_hash` → RECOMPILE *this topic only*. A change to one topic's `notes` does not invalidate other topics.
@@ -116,26 +119,25 @@ These compiler-identity fields are stored **per topic**, not globally. A topic t
 
 **Completion-summary callouts related to compiler changes:**
 
-- If the compiler-change check (step 3) fired for every topic and drove a full rebuild (i.e. no `--topic` was passed and the plugin version or skill hash differed from every stored entry), surface it as: "Compiler updated since last compile (v{old} → v{new}) — full rebuild." This is the normal case when a user upgrades the plugin and runs `/wiki-compile` next.
-- If `--topic <slug>` was passed and the compiler changed, recompile only the targeted topic and warn: "Compiler updated since last compile, but `--topic` was passed — other topics remain on old rules. Run `/wiki-compile` (without `--topic`) to propagate the change." Do not touch other topics' stored values.
+- If the compiler-change check (step 3) fired for every topic and drove a full rebuild (i.e. no `--topic` was passed and the `compiler_hash` differed from every stored entry), surface it as: "Compiler logic changed since last compile — full rebuild." This is the normal case when a user edits the skill, templates, or compile orchestrator and runs `/wiki-compile` next.
+- If `--topic <slug>` was passed and the compiler changed, recompile only the targeted topic and warn: "Compiler logic changed since last compile, but `--topic` was passed — other topics remain on old rules. Run `/wiki-compile` (without `--topic`) to propagate the change." Do not touch other topics' stored values.
 
 **Note on global config and compiler changes:**
 - A change to `preferences` (the global list) changes every topic's `config_hash` (since each hash includes `preferences`), so it correctly invalidates all topics.
 - A change to a single `topics.<slug>` entry only changes that topic's `config_hash`.
 - Schema-level changes (e.g. `article_sections`, `mode`, `output`) should invalidate all topics — include them in the hash or force a full recompile when they change.
-- Plugin version bumps and edits to `SKILL.md` invalidate each topic the next time it's evaluated, via step 3 above. This is load-bearing for getting heuristic changes to propagate retroactively. **Bump `version` in `plugin.json` whenever compiler logic or editorial rules change** — otherwise users on a stale cached install will silently run old instructions. The `skill_hash` check is a belt-and-braces backup for the common case where someone edits `SKILL.md` without remembering to bump the version.
+- Edits to `SKILL.md`, any file under `templates/`, or `commands/wiki-compile.md` change the `compiler_hash` automatically and invalidate each topic the next time it's evaluated via step 3 above. This propagates heuristic changes retroactively with no manual bookkeeping. If a future change adds a new file that should influence compilation, update the `compiler_hash` recipe above to include it.
 
 **Persisting the state (in Phase 5):**
 
-After each topic is compiled, update `.compile-state.json`. Only update a topic's `plugin_version` and `skill_hash` when *that topic* actually recompiled — skipped topics keep their previous values, which is what preserves the compiler-change signal across scoped `--topic` runs.
+After each topic is compiled, update `.compile-state.json`. Only update a topic's `compiler_hash` when *that topic* actually recompiled — skipped topics keep their previous hash, which is what preserves the compiler-change signal across scoped `--topic` runs.
 ```json
 {
   "topics": {
     "gradient-routing": {
       "sources": ["Gradient Routing/OVERVIEW.md", "..."],
       "config_hash": "<hash>",
-      "plugin_version": "2.1.0",
-      "skill_hash": "<first 16 hex chars of SHA-256>",
+      "compiler_hash": "<first 16 hex chars of SHA-256>",
       "last_compiled": "2026-04-20T12:34:56Z"
     }
   },
@@ -143,7 +145,7 @@ After each topic is compiled, update `.compile-state.json`. Only update a topic'
 }
 ```
 
-This rule is important for a vault with many topics: only the ones that actually changed cost LLM tokens to recompile. A quiet day updates zero topics. A source deletion or a single `topics.<slug>.notes` entry only invalidates the one affected topic — but a plugin version bump or `SKILL.md` edit invalidates every topic the next time it's evaluated via step 3 above.
+This rule is important for a vault with many topics: only the ones that actually changed cost LLM tokens to recompile. A quiet day updates zero topics. A source deletion or a single `topics.<slug>.notes` entry only invalidates the one affected topic — but any edit to `SKILL.md`, a template, or `wiki-compile.md` invalidates every topic the next time it's evaluated via step 3 above.
 
 ### Phase 1b: Image inventory
 
@@ -472,8 +474,7 @@ Always regenerate index.md, even if no topics changed (it's cheap).
     "{slug1}": {
       "sources": ["{path1}", "{path2}", ...],
       "config_hash": "{hash of preferences + topics.slug1 subtree used this compile}",
-      "plugin_version": "{version field from plugin.json when this topic was last compiled}",
-      "skill_hash": "{first 16 hex chars of SHA-256 of SKILL.md when this topic was last compiled}",
+      "compiler_hash": "{first 16 hex chars of SHA-256 over SKILL.md + templates/*.md + commands/wiki-compile.md, sorted}",
       "last_compiled": "{ISO timestamp}"
     }
   },
@@ -483,7 +484,9 @@ Always regenerate index.md, even if no topics changed (it's cheap).
 }
 ```
 
-For topics that were skipped in this run, preserve their existing entry unchanged — including their `plugin_version` and `skill_hash`, which is what makes the compiler-change signal survive a `--topic` scoped run. For topics that recompiled, update `sources`, `config_hash`, `plugin_version`, `skill_hash`, and `last_compiled` to the current values. For topics no longer present (removed from schema by user), remove their entry.
+For topics that were skipped in this run, preserve their existing entry unchanged — including their `compiler_hash`, which is what makes the compiler-change signal survive a `--topic` scoped run. For topics that recompiled, update `sources`, `config_hash`, `compiler_hash`, and `last_compiled` to the current values. For topics no longer present (removed from schema by user), remove their entry.
+
+**Migrating from older state:** Entries written by earlier versions of this skill used `plugin_version` + `skill_hash` instead of `compiler_hash`. Treat any topic whose entry lacks `compiler_hash` (regardless of whether the legacy fields are present) as failing the compiler-change check in step 3 above — i.e. RECOMPILE it. Drop the legacy fields when writing the updated entry.
 
 ## Phase 6: Generate CONTEXT.md (codebase mode only, first run)
 
