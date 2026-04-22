@@ -1,23 +1,15 @@
 #!/usr/bin/env bash
 # SessionStart hook for wikiforge plugin
-# Detects .wiki-compiler.yml (preferred) or legacy .wiki-compiler.json and
-# injects wiki context based on mode.
+# Detects .wiki-compiler.yml and injects wiki context based on mode.
 
 set -euo pipefail
 
-# Walk up from $PWD to find .wiki-compiler.yml (preferred) or .json (legacy)
+# Walk up from $PWD to find .wiki-compiler.yml
 config_file=""
-config_ext=""
 dir="$PWD"
 while [ "$dir" != "/" ]; do
   if [ -f "$dir/.wiki-compiler.yml" ]; then
     config_file="$dir/.wiki-compiler.yml"
-    config_ext="yml"
-    break
-  fi
-  if [ -f "$dir/.wiki-compiler.json" ]; then
-    config_file="$dir/.wiki-compiler.json"
-    config_ext="json"
     break
   fi
   dir="$(dirname "$dir")"
@@ -30,28 +22,21 @@ fi
 
 project_root="$(dirname "$config_file")"
 
-# Read a top-level scalar field from the config, handling both JSON and
-# YAML without requiring js-yaml. For YAML we only support top-level
-# scalars — the session-start hook doesn't need nested fields.
+# Read a top-level YAML scalar field. The session-start hook doesn't need
+# nested fields, so we only parse top-level scalars. Parsing is delegated
+# to a helper script that handles double-quoted, single-quoted, and
+# unquoted values, stripping inline comments ONLY on unquoted values so
+# `name: "Project #42"` is preserved.
 get_config_field() {
   local field=$1
   local default=$2
-  if [ "$config_ext" = "json" ]; then
-    node -e "const c=require('$config_file'); console.log(c.$field || '$default')" 2>/dev/null || echo "$default"
+  local helper="$(dirname "${BASH_SOURCE[0]}")/_read-yaml-field.js"
+  local val
+  val=$(node "$helper" "$config_file" "$field" 2>/dev/null)
+  if [ -z "$val" ]; then
+    echo "$default"
   else
-    # YAML scalar parsing is delegated to a helper script. Handles
-    # double-quoted, single-quoted, and unquoted values; strips inline
-    # comments ONLY on unquoted values so `name: "Project #42"` is
-    # preserved. Inline heredoc-in-$() breaks bash parsing when the
-    # node script contains single quotes (regex), so this is external.
-    local helper="$(dirname "${BASH_SOURCE[0]}")/_read-yaml-field.js"
-    local val
-    val=$(node "$helper" "$config_file" "$field" 2>/dev/null)
-    if [ -z "$val" ]; then
-      echo "$default"
-    else
-      echo "$val"
-    fi
+    echo "$val"
   fi
 }
 

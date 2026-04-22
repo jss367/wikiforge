@@ -1,4 +1,4 @@
-<!-- CODEBASE TEMPLATE: Used when mode is "codebase" in .wiki-compiler.json.
+<!-- CODEBASE TEMPLATE: Used when mode is "codebase" in .wiki-compiler.yml.
      Designed for code modules, services, and infrastructure components.
      New codebase projects get custom sections generated during /wiki-init --codebase. -->
 

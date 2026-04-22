@@ -42,7 +42,7 @@ When codebase mode is selected, use this streamlined flow instead of the standar
 
 ### Codebase Step 1: Check for existing config
 
-Same as standard Step 1 — check for `.wiki-compiler.yml` (or legacy `.wiki-compiler.json`) and ask to reconfigure or abort.
+Same as standard Step 1 — check for `.wiki-compiler.yml` and ask to reconfigure or abort.
 
 ### Codebase Step 2: Auto-detect everything
 
@@ -183,7 +183,7 @@ Want me to add a reference to wiki/CONTEXT.md in your CLAUDE.md?
 
 ### Step 1: Check for existing config
 
-Look for `.wiki-compiler.yml` (or legacy `.wiki-compiler.json`) in the current project root. If it exists:
+Look for `.wiki-compiler.yml` in the current project root. If it exists:
 
 ```
 You already have a wiki configured for "{name}" ({topic_count} topics, last compiled {date}).

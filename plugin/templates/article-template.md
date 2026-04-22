@@ -1,4 +1,4 @@
-<!-- DEFAULT TEMPLATE: Used when .wiki-compiler.json has no article_sections field.
+<!-- DEFAULT TEMPLATE: Used when .wiki-compiler.yml has no article_sections field.
      Wikipedia-style hub article. Short lead, sectioned body with inline wikilinks
      and hatnotes to sub-articles. Sub-articles live at topics/{topic}/{sub-slug}.md
      and are compiled per the sub-article template. -->

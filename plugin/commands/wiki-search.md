@@ -6,7 +6,7 @@ Search across all wiki articles for keywords, phrases, or topics.
 
 ### Step 1: Validate
 
-- Read `.wiki-compiler.yml` (or legacy `.wiki-compiler.json`) from the project root (or nearest parent directory). If not found, tell the user to run `/wiki-init` first.
+- Read `.wiki-compiler.yml` from the project root (or nearest parent directory). If not found, tell the user to run `/wiki-init` first.
 - Accept a search query as argument (e.g., `/wiki-search retention experiments`)
 - If no argument provided, ask: "What are you looking for?"
 

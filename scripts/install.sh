@@ -36,18 +36,31 @@ bash "$(dirname "$0")/sync-overlay.sh"
 echo ""
 echo "Quartz setup complete."
 echo ""
+
+# Register the Claude Code plugin. Both commands are idempotent — safe to re-run.
+if command -v claude >/dev/null 2>&1; then
+  echo "Registering Claude Code plugin..."
+  claude plugin marketplace add "$REPO_ROOT"
+  claude plugin install wikiforge@wikiforge
+  echo ""
+  echo "Plugin registered. Restart Claude Code to load the new commands and hooks."
+else
+  echo "Claude Code CLI ('claude') not found on PATH — skipping plugin registration."
+  echo "Install Claude Code, then re-run this script, or register manually:"
+  echo "    claude plugin marketplace add $REPO_ROOT"
+  echo "    claude plugin install wikiforge@wikiforge"
+fi
+
+echo ""
 echo "Next steps:"
 echo "  1. Sign in to Obsidian Sync on this machine and pair with your vault."
 echo "     Default vault path: ~/Documents/Obsidian Vault"
 echo ""
-echo "  2. Register the Claude Code plugin. Add to ~/.claude/settings.json:"
-echo "       \"plugins\": [\"$REPO_ROOT/plugin\"]"
-echo "     (or however you normally register plugins — consult Claude Code docs)"
-echo ""
-echo "  3. Serve the compiled wiki:"
+echo "  2. Serve the compiled wiki:"
 echo "       bash $REPO_ROOT/scripts/wiki-serve.sh compiled"
 echo "     (or /wiki-serve from inside Claude Code)"
 echo ""
-echo "  Future wikiforge updates: just git pull and re-serve. wiki-serve.sh"
-echo "  calls sync-overlay.sh automatically."
+echo "  Future wikiforge updates: git pull, then 'claude plugin update wikiforge'"
+echo "  to refresh the plugin cache. Quartz overlay is re-applied automatically"
+echo "  by wiki-serve.sh on every serve."
 echo ""

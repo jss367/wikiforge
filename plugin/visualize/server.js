@@ -41,27 +41,20 @@ for (let i = 2; i < process.argv.length; i++) {
 }
 
 if (!wikiDir) {
-  // Try to find wiki dir from .wiki-compiler.yml (preferred) or legacy
-  // .wiki-compiler.json in cwd. We only need the `output` field, so a
-  // tiny scalar parser is enough — avoids adding a js-yaml dependency.
+  // Try to find wiki dir from .wiki-compiler.yml in cwd. We only need
+  // the `output` field, so a tiny scalar parser is enough — avoids
+  // adding a js-yaml dependency.
   const ymlPath = path.join(process.cwd(), '.wiki-compiler.yml');
-  const jsonPath = path.join(process.cwd(), '.wiki-compiler.json');
-  let output = null;
   if (fs.existsSync(ymlPath)) {
     const content = fs.readFileSync(ymlPath, 'utf8');
-    output = getYamlScalar(content, 'output') || 'wiki/';
-  } else if (fs.existsSync(jsonPath)) {
-    const config = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-    output = config.output || 'wiki/';
-  }
-  if (output) {
+    const output = getYamlScalar(content, 'output') || 'wiki/';
     wikiDir = path.resolve(process.cwd(), output);
   }
 }
 
 if (!wikiDir || !fs.existsSync(wikiDir)) {
   console.error('Usage: node server.js --wiki-dir path/to/wiki/');
-  console.error('  Or run from a directory with .wiki-compiler.yml (or legacy .wiki-compiler.json)');
+  console.error('  Or run from a directory with .wiki-compiler.yml');
   process.exit(1);
 }
 
