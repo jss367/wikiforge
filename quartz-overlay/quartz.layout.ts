@@ -1,6 +1,7 @@
 import { PageLayout, SharedLayout } from "./quartz/cfg"
 import * as Component from "./quartz/components"
 import EditInObsidian from "./quartz/components/EditInObsidian"
+import ExportArticle from "./quartz/components/ExportArticle"
 import LastEdited from "./quartz/components/LastEdited"
 
 // Title-cases Explorer node display names. Inlined because Quartz serializes
@@ -41,6 +42,7 @@ export const defaultContentPageLayout: PageLayout = {
     Component.ContentMeta(),
     Component.TagList(),
     EditInObsidian(),
+    ExportArticle(),
   ],
   afterBody: [LastEdited()],
   left: [
@@ -77,6 +79,7 @@ export const defaultListPageLayout: PageLayout = {
     Component.ArticleTitle(),
     Component.ContentMeta(),
     EditInObsidian(),
+    ExportArticle(),
   ],
   afterBody: [LastEdited()],
   left: [
