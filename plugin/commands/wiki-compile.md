@@ -19,7 +19,7 @@ Compile all configured markdown source files into a topic-based wiki.
    > - **Incremental** (default): only recompile topics whose sources changed since the last run. Fast, cheap.
    > - **Full rebuild** (`--force`): recompile every topic. Use this when compiler logic or editorial preferences changed, or when you want all topics re-evaluated under the current rules.
 
-   Wait for the user's answer before invoking the skill. Skip this question only when: (a) `.compile-state.json` doesn't exist (first run is always full), or (b) the compiler detects that the plugin version or skill instructions have changed since the last compile — in that case proceed directly with a full rebuild and tell the user: "The compiler's instructions changed since the last compile; forcing a full rebuild so all topics are re-evaluated under the new rules."
+   Wait for the user's answer before invoking the skill. Skip this question only when: (a) `.compile-state.json` doesn't exist (first run is always full), or (b) the current plugin version or skill hash doesn't match any topic's stored values in `.compile-state.json` — in that case proceed directly without asking and tell the user: "The compiler's instructions changed since the last compile; every topic with a mismatched stored version will be re-evaluated under the new rules." (Each topic's own skip decision still decides RECOMPILE vs SKIP, so topics whose stored values already match the new compiler — e.g. from a recent `--topic` run — correctly skip.)
 
 5. **Invoke the `wiki-compiler` skill** to run the compilation:
    - Pass `article_sections`, `preferences`, and per-topic directives (`topics.<slug>.notes`) from config to the skill
