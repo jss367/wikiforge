@@ -13,13 +13,24 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HOOK_SRC="$REPO_ROOT/scripts/bump-plugin-version.sh"
 
 # Resolve the common hooks dir so the hook applies across all worktrees.
-# Falls through quietly if this isn't a git checkout.
-HOOKS_DIR=$(git -C "$REPO_ROOT" rev-parse --git-common-dir 2>/dev/null || true)
-if [ -z "$HOOKS_DIR" ] || [ ! -d "$HOOKS_DIR" ]; then
+# Falls through quietly if this isn't a git checkout. `git rev-parse
+# --git-common-dir` can return a relative path (e.g. ".git"), so resolve
+# it against $REPO_ROOT before testing — running `install.sh` from outside
+# the repo is common, and we don't want to silently no-op in that case.
+HOOKS_COMMON=$(git -C "$REPO_ROOT" rev-parse --git-common-dir 2>/dev/null || true)
+if [ -z "$HOOKS_COMMON" ]; then
   echo "[wikiforge] not a git checkout — skipping hook install"
   exit 0
 fi
-HOOKS_DIR="$HOOKS_DIR/hooks"
+case "$HOOKS_COMMON" in
+  /*) ;;                              # already absolute
+  *)  HOOKS_COMMON="$REPO_ROOT/$HOOKS_COMMON" ;;
+esac
+if [ ! -d "$HOOKS_COMMON" ]; then
+  echo "[wikiforge] common git dir not found at $HOOKS_COMMON — skipping hook install"
+  exit 0
+fi
+HOOKS_DIR="$HOOKS_COMMON/hooks"
 mkdir -p "$HOOKS_DIR"
 HOOK_DST="$HOOKS_DIR/pre-commit"
 

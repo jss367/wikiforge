@@ -9,9 +9,11 @@
 #
 # Skip conditions (all exit 0, no bump):
 #   - No staged files under plugin/ (nothing to do).
-#   - Branch already bumped vs origin/main (prevents a 10-commit PR from
-#     bumping the version 10 times; the first plugin-touching commit bumps,
-#     the rest ride along).
+#   - Branch already bumped vs its merge-base with origin/main (prevents
+#     a 10-commit PR from bumping the version 10 times; the first plugin-
+#     touching commit bumps, the rest ride along). Using merge-base, not
+#     origin/main tip, so a stale branch doesn't misread main's bumps as
+#     its own.
 #   - origin/main unknown (fresh repo, detached HEAD, etc) — don't block.
 #
 # Fail conditions (exit 1, commit aborted):
@@ -37,9 +39,21 @@ if ! git rev-parse --verify origin/main >/dev/null 2>&1; then
   exit 0
 fi
 
+# Diff against the merge-base, not origin/main's tip. A stale branch (cut
+# at 2.1.0 while main later moved to 2.1.1) would otherwise show a
+# "+version: 2.1.0" line in the diff vs origin/main tip — an accidental
+# regression the naive grep would misread as "branch already bumped" and
+# skip bumping. Merge-base captures only what this branch did to the
+# manifest.
+BASE=$(git merge-base HEAD origin/main 2>/dev/null || true)
+if [ -z "$BASE" ]; then
+  exit 0
+fi
+
 # Has the version already changed on this branch (committed or staged) vs
-# origin/main? If so, the first bumping commit already landed; skip.
-if git diff --cached origin/main -- "$MANIFEST" 2>/dev/null | grep -qE '^\+.*"version"'; then
+# the merge-base? If so, the first bumping commit already landed (or the
+# author staged an explicit bump); skip.
+if git diff --cached "$BASE" -- "$MANIFEST" 2>/dev/null | grep -qE '^\+.*"version"'; then
   exit 0
 fi
 
