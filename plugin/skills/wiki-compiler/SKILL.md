@@ -290,15 +290,18 @@ After the hub article for a topic is compiled, identify natural **sub-topic clus
 
 ### Identifying sub-articles
 
-A sub-article should exist for each coherent, substantial unit in the source material. Natural candidates:
+The default rule: **every substantial standalone source file (≳100 lines of self-contained content) gets its own sub-page**, unless it's clearly a variant of another file. Don't filter by what *kind* of unit the file is — filter by whether it carries a coherent, sub-page-sized argument that a reader would want to land on directly.
+
+Specifically, sub-pages should be created for:
 - Individual named experiments (e.g., a `spike-v3/` directory, a `flux-klein-v01-design.md` file)
-- Individual decision records (`decisions/*.md` — one sub-page per decision)
+- **Every individual decision record** (`decisions/*.md`, `ADR-*.md`, `docs/adr/*.md` — one sub-page per decision, even short ones; use the file basename without the `.md` extension as the sub-slug, regardless of whether the basename is dated, numbered, or named). If a decision file's basename would produce a sub-slug that collides with any other sub-page slug in the same topic — whether another decision or a non-decision sub-page — disambiguate by walking up the file's path one directory at a time and prefixing each ancestor (joined with `-`, lowercase, kebab-cased) until the resulting sub-slug is unique against the topic's full sub-page slug set. Examples: `decisions/auth.md` vs `docs/adr/auth.md` → `decisions-auth` and `adr-auth`; `service-a/decisions/auth.md` vs `service-b/decisions/auth.md` → `service-a-decisions-auth` and `service-b-decisions-auth`. Continue walking up until uniqueness is achieved (no fixed prefix depth). Decisions are the load-bearing why-records of the project and must remain individually addressable, and no decision may be silently overwritten by another.
 - Individual concept notes (`concepts/*.md` — one sub-page per concept)
 - Named tracks / workstreams (a group of related files covering one research track)
+- **Cross-cutting design, rationale, reference, and strategy documents** that span multiple units (e.g., a `proxy-experiment-design.md` covering V01–V05, a `dataset-strategy.md`, a `training-cost-reference.md`). These are the easiest category to miss because they don't slot into the named-unit categories above — but they're often the most reused parts of the wiki. If the file reads like a Wikipedia reference article in its own right, it gets a sub-page.
 
-Merge related files into one sub-article when they're clearly variants of the same thing (e.g., `nand-routing-spike-v4-design.md` and `nand-routing-spike-v4_1-design.md` → one `spike-v4` sub-page). Don't force a sub-article for every tiny file; one-paragraph stubs should be linked inline from the hub instead.
+Merge related files into one sub-article in two cases: (a) when files are clearly variants of the same thing (e.g., `nand-routing-spike-v4-design.md` and `nand-routing-spike-v4_1-design.md` → one `spike-v4` sub-page), or (b) when files are complementary parts of a single named track or workstream that warrants one consolidated sub-page (e.g., a track's `design.md`, `evaluation.md`, and `rollout.md` → one track sub-page). Do NOT merge files that are independent enough to stand on their own — bias toward more sub-pages, not fewer; a substantial file folded into a hub section becomes invisible. One-paragraph stubs (≲30 lines with no real content beyond a pointer) can be linked inline from the hub instead.
 
-Target: 5–15 sub-articles per topic depending on topic size. If a topic has fewer than ~5 source files, sub-articles may not be warranted; link source files directly from the hub.
+Target: 5–20 sub-articles per topic depending on topic size. Erring on the high side is fine — sub-pages are cheap, and missed pages are expensive (the content stops being findable). The substance-based rule above is sufficient on its own; do not skip sub-pages for a topic just because it has few source files. A topic with three substantial 150-line design docs gets three sub-pages; a topic whose only source files are short non-decision stubs naturally produces zero sub-pages and is linked from the hub directly. Decision records are exempt from the short-stub exclusion — every file matching any of the decision discovery patterns above (`decisions/*.md`, `ADR-*.md`, `docs/adr/*.md`) gets its own sub-page regardless of length, per the rule above.
 
 ### Writing sub-articles
 
