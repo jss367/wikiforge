@@ -60,7 +60,19 @@ export const StripDuplicateTitle: QuartzTransformerPlugin = () => ({
         if (normalize(toString(first)) !== normalizedTitle) return
 
         tree.children.splice(idx, 1)
+        // Signal to ArticleTitle that the body H1 carrying this page's
+        // anchor target is gone, so it's safe for the component to claim
+        // that id on the rendered title without duplicating an id that
+        // heading-id generation would otherwise produce for a still-present
+        // body heading.
+        file.data.strippedDuplicateTitle = true
       },
     ]
   },
 })
+
+declare module "vfile" {
+  interface DataMap {
+    strippedDuplicateTitle: boolean
+  }
+}
