@@ -4,7 +4,7 @@ Launch an interactive canvas-based knowledge graph of your compiled wiki. Topics
 
 ## Instructions
 
-1. Check that `.wiki-compiler.yml` or legacy `.wiki-compiler.json` exists in the project root
+1. Check that `.wiki-compiler.yml` exists in the project root
 2. Check that the wiki has been compiled (output directory has `index.md`)
 3. If not compiled, suggest running `/wiki-compile` first
 

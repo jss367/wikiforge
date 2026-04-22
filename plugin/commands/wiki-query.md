@@ -8,7 +8,7 @@ The user's question is passed as `$ARGUMENTS`. Example: `/wiki-query what do we 
 
 ## Instructions
 
-1. **Read configuration** from `.wiki-compiler.yml` (or legacy `.wiki-compiler.json`). If not found, tell user to run `/wiki-init`.
+1. **Read configuration** from `.wiki-compiler.yml`. If not found, tell user to run `/wiki-init`.
 
 2. **Read index.md** from the configured output directory to see all available topics.
 

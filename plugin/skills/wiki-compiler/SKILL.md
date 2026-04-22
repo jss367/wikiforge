@@ -10,11 +10,11 @@ This skill contains the 5-phase algorithm for compiling source files into a topi
 **Safety rule:** NEVER modify any file outside the configured output directory. Source files are read-only.
 
 **Exceptions (allowed writes outside the output directory):**
-- `.wiki-compiler.yml` and `.wiki-compiler.json` at the project root. The skill writes these only in two situations: (1) one-time JSON→YAML migration on first run if only the JSON file exists, and (2) appending a user-approved directive to `preferences` or `topics.<slug>.notes` via the "Learning from user feedback" loop. All other edits to source notes remain out of scope.
+- `.wiki-compiler.yml` at the project root. The skill writes this only when appending a user-approved directive to `preferences` or `topics.<slug>.notes` via the "Learning from user feedback" loop. All other edits to source notes remain out of scope.
 
 ## Prerequisites
 
-Before running, read the compiler config file from the project root. Prefer `.wiki-compiler.yml`; fall back to `.wiki-compiler.json` if the YAML file doesn't exist. If ONLY the JSON file exists, **migrate it**: parse it, re-emit as YAML at `.wiki-compiler.yml`, then delete the JSON file. The two formats share the same schema — YAML is preferred because it supports multi-line strings and comments, which the `preferences` and `topics.<slug>.notes` fields benefit from.
+Before running, read `.wiki-compiler.yml` from the project root. If it doesn't exist, tell the user to run `/wiki-init` first.
 
 **Config schema:**
 
@@ -250,7 +250,7 @@ For EACH topic that has new or changed source files (i.e. not skipped by the Inc
 1. Read ALL source files classified under that topic (need full context, not just changed files)
 2. Write the topic **hub article** to `{output}/topics/{topic-slug}.md`
 3. **Determine article structure:**
-   - If the active config file (`.wiki-compiler.yml`, or legacy `.wiki-compiler.json` if YAML isn't present) defines an `article_sections` array: use those sections in order. Each section's `description` field tells you what content belongs there.
+   - If `.wiki-compiler.yml` defines an `article_sections` array: use those sections in order. Each section's `description` field tells you what content belongs there.
    - If `article_sections` is absent: fall back to `${CLAUDE_PLUGIN_ROOT}/templates/article-template.md`
 4. Fill every section with specific, factual content — no placeholders
 5. **Lead** is a Wikipedia-style 1-3 paragraph intro. No preamble; start with the topic name bolded and its definition.

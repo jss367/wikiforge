@@ -6,7 +6,7 @@ One-time migration command. Analyzes your AGENTS.md or CLAUDE.md session startup
 
 ### Step 1: Validate
 
-- Read `.wiki-compiler.yml` (or legacy `.wiki-compiler.json`) — if not found, tell the user to run `/wiki-init` first
+- Read `.wiki-compiler.yml` — if not found, tell the user to run `/wiki-init` first
 - Check that the wiki has been compiled at least once (index.md and topic articles exist)
 - If not compiled, tell the user to run `/wiki-compile` first
 
