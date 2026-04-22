@@ -9,11 +9,12 @@
 #
 # Skip conditions (all exit 0, no bump):
 #   - No staged files under plugin/ (nothing to do).
-#   - Version value already differs from merge-base with origin/main
+#   - Index version is strictly ahead of origin/main's current version
 #     (prevents a 10-commit PR from bumping the version 10 times; the
-#     first plugin-touching commit bumps, the rest ride along). Compares
-#     parsed values, not diff-line text, so a format-only rewrite of
-#     plugin.json can't masquerade as an already-bumped version.
+#     first plugin-touching commit bumps, the rest ride along). Comparing
+#     against main's tip (rather than merge-base) ensures we re-bump when
+#     main catches up via a parallel PR, so every merge ships a fresh
+#     cache-busting version.
 #   - origin/main unknown (fresh repo, detached HEAD, etc) — don't block.
 #
 # Fail conditions (exit 1, commit aborted):
@@ -45,15 +46,6 @@ if ! git rev-parse --verify origin/main >/dev/null 2>&1; then
   exit 0
 fi
 
-# Use the merge-base, not origin/main's tip, as the "what did this branch
-# change" baseline. A stale branch (cut at 2.1.0 while main later moved
-# to 2.1.1) otherwise looks like it has a "+version" line in its diff
-# vs origin/main tip even though this branch never touched the manifest.
-BASE=$(git merge-base HEAD origin/main 2>/dev/null || true)
-if [ -z "$BASE" ]; then
-  exit 0
-fi
-
 parse_version() {
   # Read a version string from stdin (plugin.json content).
   grep -oE '"version"[[:space:]]*:[[:space:]]*"[0-9]+\.[0-9]+\.[0-9]+"' \
@@ -68,7 +60,6 @@ parse_version() {
 # as "branch already bumped" and skip, letting the commit land with the
 # index's (unchanged) version. Sourcing from the index ties the check to
 # what's actually about to be committed.
-BASE_VERSION=$(git show "$BASE:$MANIFEST" 2>/dev/null | parse_version || true)
 INDEX_BLOB=$(git show ":0:$MANIFEST" 2>/dev/null || true)
 if [ -z "$INDEX_BLOB" ]; then
   # plugin.json not in the index — something's wrong. Bail rather than
@@ -81,14 +72,6 @@ if [ -z "$INDEX_VERSION" ]; then
   exit 1
 fi
 
-# Skip when the index's version already differs from merge-base — the
-# branch already bumped (in a prior commit or an explicit staged edit).
-# Compare values, not diff-line text, so a format-only rewrite with the
-# same version value still bumps normally.
-if [ -n "$BASE_VERSION" ] && [ "$BASE_VERSION" != "$INDEX_VERSION" ]; then
-  exit 0
-fi
-
 version_key() {
   # Encode a major.minor.patch version as a zero-padded integer so two
   # values sort the same numerically as they would semver-wise. Assumes
@@ -97,6 +80,21 @@ version_key() {
   IFS='.' read -r a b c <<< "$1"
   printf '%03d%03d%03d' "$a" "$b" "$c"
 }
+
+MAIN_VERSION=$(git show "origin/main:$MANIFEST" 2>/dev/null | parse_version || true)
+
+# Skip only when this branch is strictly ahead of origin/main. A naive
+# "branch already bumped" check that compared against merge-base would
+# incorrectly skip when main catches up to our branch's version via a
+# parallel PR — e.g. two branches cut at 1.0.0 both bump to 1.0.1, A
+# merges first, B's later plugin commits keep 1.0.1 instead of re-bumping
+# and B's merge leaves main at 1.0.1 with new content. Comparing against
+# main's current version instead means we re-bump whenever main has
+# caught up, guaranteeing a fresh cache-busting version per merge.
+if [ -n "$MAIN_VERSION" ] \
+   && [ "$(version_key "$INDEX_VERSION")" -gt "$(version_key "$MAIN_VERSION")" ]; then
+  exit 0
+fi
 
 # Bump from max(INDEX_VERSION, MAIN_VERSION), not just INDEX_VERSION. A
 # stale branch cut at 1.0.0 while main advanced to 1.0.1 would otherwise
