@@ -14,7 +14,13 @@ This skill contains the 5-phase algorithm for compiling source files into a topi
 
 ## Prerequisites
 
-Before running, read `.wiki-compiler.yml` from the project root. If it doesn't exist, tell the user to run `/wiki-init` first.
+Before running, read `.wiki-compiler.yml` from the project root. If it doesn't exist, offer to run `/wiki-init` now. If the user declines, bail. If they accept, run init inline and then branch on the outcome:
+
+- **Config created, init already compiled** (codebase mode Step 3 option A in `plugin/commands/wiki-init.md` creates the config and runs `/wiki-compile` as part of its own flow) — surface init's compile summary and stop; don't re-run the compile.
+- **Config created, init did not compile** (knowledge mode; codebase mode option B) — re-read the config and proceed.
+- **Config not created** (user canceled inside init) — stop cleanly with an "aborted" message; don't attempt to compile without config.
+
+This mirrors the same logic in `plugin/commands/wiki-compile.md` step 1, for invocations that call the skill directly rather than through the command wrapper.
 
 **Config schema:**
 
