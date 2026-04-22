@@ -294,7 +294,7 @@ The default rule: **every substantial standalone source file (≳100 lines of se
 
 Specifically, sub-pages should be created for:
 - Individual named experiments (e.g., a `spike-v3/` directory, a `flux-klein-v01-design.md` file)
-- **Every individual decision record** (`decisions/*.md` — one sub-page per decision, even short ones; the dated filename is the sub-slug). Decisions are the load-bearing why-records of the project and must remain individually addressable.
+- **Every individual decision record** (`decisions/*.md`, `ADR-*.md`, `docs/adr/*.md` — one sub-page per decision, even short ones; use the file basename without the `.md` extension as the sub-slug, regardless of whether the basename is dated, numbered, or named). Decisions are the load-bearing why-records of the project and must remain individually addressable.
 - Individual concept notes (`concepts/*.md` — one sub-page per concept)
 - Named tracks / workstreams (a group of related files covering one research track)
 - **Cross-cutting design, rationale, reference, and strategy documents** that span multiple units (e.g., a `proxy-experiment-design.md` covering V01–V05, a `dataset-strategy.md`, a `training-cost-reference.md`). These are the easiest category to miss because they don't slot into the named-unit categories above — but they're often the most reused parts of the wiki. If the file reads like a Wikipedia reference article in its own right, it gets a sub-page.
