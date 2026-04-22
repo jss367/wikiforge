@@ -66,3 +66,41 @@ pre > code {
     opacity: 0.8;
   }
 }
+
+// Wikipedia-style "wikitable": thin 1px gray borders on cells and headers, a
+// lightly-filled header row, modest padding, and left alignment. Scoped to
+// the article content area so tables in sidebars/chrome keep their stock
+// look. Uses --lightgray for borders (theme-aware) and a fixed header tint
+// per theme because Wikipedia itself uses a near-invariant header shade.
+.page > #quartz-body .center article {
+  table {
+    border-collapse: collapse;
+    margin: 0.5em 0 1em 0;
+    // Sit flush left rather than centered, matching Wikipedia's layout.
+    margin-right: auto;
+  }
+
+  th,
+  td {
+    border: 1px solid var(--lightgray);
+    padding: 0.3em 0.6em;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  th {
+    background-color: var(--wikitable-header);
+    font-weight: 600;
+  }
+}
+
+:root[saved-theme="light"] {
+  // Wikipedia's standard wikitable header shade.
+  --wikitable-header: #eaecf0;
+}
+
+:root[saved-theme="dark"] {
+  // Slightly lighter than --lightgray so the header still reads as a header
+  // against the dark table body, without jumping forward visually.
+  --wikitable-header: #2a2a2e;
+}
