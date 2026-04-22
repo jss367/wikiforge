@@ -51,6 +51,13 @@ export const AbsoluteInternalLinks: QuartzTransformerPlugin = () => ({
           if (isAbsoluteUrl(href, { httpOnly: false })) return href
           // Protocol-relative `//host/path`
           if (href.startsWith("//")) return href
+          // Query-only URLs (`?v=2`, `?raw=1`) refer to the current document,
+          // not the current directory. Resolving them against `pageDir` would
+          // rewrite `?v=2` on `topics/foo` to `/topics/?v=2` and drop the page.
+          // Anchor to the slug instead so the query lands on the same page.
+          if (href.startsWith("?")) {
+            return (slug === "index" ? "/" : "/" + slug) + href
+          }
           try {
             // Use a sentinel host that will never collide with a real base URL.
             // We only care about the `.pathname + .search + .hash` output.
