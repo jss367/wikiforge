@@ -9,11 +9,11 @@
 #
 # Skip conditions (all exit 0, no bump):
 #   - No staged files under plugin/ (nothing to do).
-#   - Branch already bumped vs its merge-base with origin/main (prevents
-#     a 10-commit PR from bumping the version 10 times; the first plugin-
-#     touching commit bumps, the rest ride along). Using merge-base, not
-#     origin/main tip, so a stale branch doesn't misread main's bumps as
-#     its own.
+#   - Version value already differs from merge-base with origin/main
+#     (prevents a 10-commit PR from bumping the version 10 times; the
+#     first plugin-touching commit bumps, the rest ride along). Compares
+#     parsed values, not diff-line text, so a format-only rewrite of
+#     plugin.json can't masquerade as an already-bumped version.
 #   - origin/main unknown (fresh repo, detached HEAD, etc) — don't block.
 #
 # Fail conditions (exit 1, commit aborted):
@@ -39,29 +39,36 @@ if ! git rev-parse --verify origin/main >/dev/null 2>&1; then
   exit 0
 fi
 
-# Diff against the merge-base, not origin/main's tip. A stale branch (cut
-# at 2.1.0 while main later moved to 2.1.1) would otherwise show a
-# "+version: 2.1.0" line in the diff vs origin/main tip — an accidental
-# regression the naive grep would misread as "branch already bumped" and
-# skip bumping. Merge-base captures only what this branch did to the
-# manifest.
+# Use the merge-base, not origin/main's tip, as the "what did this branch
+# change" baseline. A stale branch (cut at 2.1.0 while main later moved
+# to 2.1.1) otherwise looks like it has a "+version" line in its diff
+# vs origin/main tip even though this branch never touched the manifest.
 BASE=$(git merge-base HEAD origin/main 2>/dev/null || true)
 if [ -z "$BASE" ]; then
   exit 0
 fi
 
-# Has the version already changed on this branch (committed or staged) vs
-# the merge-base? If so, the first bumping commit already landed (or the
-# author staged an explicit bump); skip.
-if git diff --cached "$BASE" -- "$MANIFEST" 2>/dev/null | grep -qE '^\+.*"version"'; then
-  exit 0
-fi
+parse_version() {
+  # Read a version string from stdin (plugin.json content).
+  grep -oE '"version"[[:space:]]*:[[:space:]]*"[0-9]+\.[0-9]+\.[0-9]+"' \
+    | head -1 \
+    | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)"$/\1/'
+}
 
-# Parse current version. Tolerates different whitespace around the colon.
-CURRENT=$(grep -oE '"version"[[:space:]]*:[[:space:]]*"[0-9]+\.[0-9]+\.[0-9]+"' "$MANIFEST" | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)"$/\1/')
+BASE_VERSION=$(git show "$BASE:$MANIFEST" 2>/dev/null | parse_version || true)
+CURRENT=$(parse_version < "$MANIFEST" || true)
 if [ -z "$CURRENT" ]; then
   echo "[wikiforge] ERROR: could not parse version from $MANIFEST" >&2
   exit 1
+fi
+
+# Compare actual version values, not diff-line presence. A formatter that
+# rewrites plugin.json without changing the version number produces a
+# "+version: X" line in the raw diff even though X is unchanged — the
+# previous line-based skip check misread that as "already bumped" and
+# silently let plugin-touching commits through without a real bump.
+if [ -n "$BASE_VERSION" ] && [ "$BASE_VERSION" != "$CURRENT" ]; then
+  exit 0
 fi
 
 IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
