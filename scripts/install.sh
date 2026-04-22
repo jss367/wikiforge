@@ -52,6 +52,9 @@ else
 fi
 
 echo ""
+bash "$(dirname "$0")/install-hooks.sh"
+
+echo ""
 echo "Next steps:"
 echo "  1. Sign in to Obsidian Sync on this machine and pair with your vault."
 echo "     Default vault path: ~/Documents/Obsidian Vault"
