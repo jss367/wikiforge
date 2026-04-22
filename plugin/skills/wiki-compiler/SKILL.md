@@ -245,7 +245,9 @@ For each topic area, also read key source files to enrich understanding:
 
 ## Phase 3: Compile Topic Hub Articles
 
-For EACH topic that has new or changed source files (i.e. not skipped by the Incremental-skip decision above):
+For EACH topic that was marked RECOMPILE by the Incremental-skip decision (for *any* reason — compiler change, config change, schema change, source-set change, or source-content change — not only source-content change):
+
+**What RECOMPILE means here.** Regenerate the hub article end-to-end via the Phase 3 agent, using the full current source set and the current editorial directives / article structure / writing rules. Do **not** shortcut to a surgical edit of the previously compiled article — e.g. patching frontmatter, tweaking one section, or leaving the body untouched because "sources didn't change since last time." The whole point of the compiler-change and config-change invalidation axes is that the *output* may differ even when the *inputs* are byte-identical; skipping to a surgical patch defeats that mechanism and silently leaves old heuristic output in place. When the agent reports its work back, "editorial hygiene only" / "frontmatter only" outcomes are a signal something went wrong — either the agent took the shortcut (fix the agent's behavior) or the topic shouldn't have been marked RECOMPILE (fix the skip decision). Surface those cases rather than burying them.
 
 1. Read ALL source files classified under that topic (need full context, not just changed files)
 2. Write the topic **hub article** to `{output}/topics/{topic-slug}.md`
@@ -303,6 +305,8 @@ Relative paths from the `topics/` directory to the source file. For files in the
 ## Phase 3a: Compile Sub-Articles (Hub-and-Spoke)
 
 After the hub article for a topic is compiled, identify natural **sub-topic clusters** within the topic's source files and compile a sub-article for each. Sub-articles live at `{output}/topics/{topic-slug}/{sub-slug}.md`.
+
+**Re-evaluate the full source set, not just new files.** On every recompile of a topic, run the promotion rule below against *every* current source file — not only files added since the last compile. Do NOT default to "keep the previous sub-page set, add one for each new file." A source that exists today but was missed on earlier compiles (common for cross-cutting design docs like `proxy-experiment-design.md` and summary docs like `v4-series-summary.md`) must still get promoted on this run if it meets the rule. The previous sub-page set is a starting suggestion, not a floor — expect to add sub-pages for spec-eligible sources that slipped through earlier compiles, and expect to remove sub-pages whose source material is gone. If the topic is being recompiled because the compiler itself changed, that is precisely the moment to re-scan for under-promoted sources; a recompile that leaves the sub-page set unchanged when spec-eligible sources are un-promoted is a bug, not a feature.
 
 ### Identifying sub-articles
 
