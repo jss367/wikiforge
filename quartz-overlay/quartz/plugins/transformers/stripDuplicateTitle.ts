@@ -1,6 +1,7 @@
 import { QuartzTransformerPlugin } from "../types"
 import { Root } from "mdast"
 import { toString } from "mdast-util-to-string"
+import { visit, EXIT } from "unist-util-visit"
 import Slugger from "github-slugger"
 import { toTitleCase } from "../../util/title"
 
@@ -64,14 +65,20 @@ export const StripDuplicateTitle: QuartzTransformerPlugin = () => ({
         tree.children.splice(idx, 1)
 
         // Signal to ArticleTitle that it can safely claim the anchor slug
-        // for the title — but only if no surviving heading would slug to
-        // the same id under heading-id generation. Otherwise we'd ship
-        // duplicate DOM ids and `#slug` would target the title instead of
-        // the section the user actually meant.
+        // for the title — but only if no surviving heading anywhere in the
+        // tree would slug to the same id under heading-id generation. Walk
+        // the full tree (not just top-level children), since headings can
+        // be nested inside blockquotes, list items, and other containers.
+        // Otherwise we'd ship duplicate DOM ids and `#slug` would target
+        // the title instead of the section the user actually meant.
         const titleSlug = new Slugger().slug(toTitleCase(title))
-        const collides = tree.children.some(
-          (n) => n.type === "heading" && new Slugger().slug(toString(n)) === titleSlug,
-        )
+        let collides = false
+        visit(tree, "heading", (node) => {
+          if (new Slugger().slug(toString(node)) === titleSlug) {
+            collides = true
+            return EXIT
+          }
+        })
         if (!collides) {
           file.data.strippedDuplicateTitle = true
         }
