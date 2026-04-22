@@ -28,10 +28,12 @@ if ! git diff --cached --name-only | grep -q '^plugin/'; then
   exit 0
 fi
 
-# Only run if plugin.json exists. (Defensive — should always exist.)
-if [ ! -f "$MANIFEST" ]; then
-  exit 0
-fi
+# No defensive "does plugin.json exist in the working tree" guard here —
+# the later INDEX_BLOB check gates on the index, which is what actually
+# gets committed. Gating on the working tree would make the hook skip
+# silently if plugin.json was accidentally deleted or renamed from disk
+# without being staged, letting the commit land with no version bump
+# despite the index still containing the manifest.
 
 # If origin/main isn't available, bail quietly. Can happen on fresh clones
 # pre-fetch, or if the user renamed their main branch.
@@ -99,12 +101,14 @@ git update-index --cacheinfo 100644,"$NEW_BLOB_HASH","$MANIFEST"
 # did, leave their working copy alone; the index bump already ensures
 # the commit is correct, and clobbering their unstaged edit would be
 # surprising.
-WT_VERSION=$(parse_version < "$MANIFEST" 2>/dev/null || true)
-if [ "$WT_VERSION" = "$INDEX_VERSION" ]; then
-  if [[ "$OSTYPE" == darwin* ]]; then
-    sed -i '' -E "s/\"version\"[[:space:]]*:[[:space:]]*\"$INDEX_VERSION\"/\"version\": \"$NEW\"/" "$MANIFEST"
-  else
-    sed -i -E "s/\"version\"[[:space:]]*:[[:space:]]*\"$INDEX_VERSION\"/\"version\": \"$NEW\"/" "$MANIFEST"
+if [ -f "$MANIFEST" ]; then
+  WT_VERSION=$(parse_version < "$MANIFEST" || true)
+  if [ "$WT_VERSION" = "$INDEX_VERSION" ]; then
+    if [[ "$OSTYPE" == darwin* ]]; then
+      sed -i '' -E "s/\"version\"[[:space:]]*:[[:space:]]*\"$INDEX_VERSION\"/\"version\": \"$NEW\"/" "$MANIFEST"
+    else
+      sed -i -E "s/\"version\"[[:space:]]*:[[:space:]]*\"$INDEX_VERSION\"/\"version\": \"$NEW\"/" "$MANIFEST"
+    fi
   fi
 fi
 
