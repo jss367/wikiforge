@@ -25,14 +25,18 @@ function vaultRootRelative(
     0,
     normalizedFilePath.length - normalizedRelativePath.length,
   )
-  // Last non-empty path segment of the content dir. In subfolder mode this is
-  // the prefix Obsidian needs; in raw mode (`-d $VAULT`) it's the vault
-  // folder itself — assume a convention that the vault folder is named to
-  // match `vaultName` and skip the prefix in that case.
-  const segments = contentDir.split("/").filter(Boolean)
-  const lastSegment = segments[segments.length - 1]
-  if (!lastSegment || lastSegment === vaultName) return normalizedRelativePath
-  return `${lastSegment}/${normalizedRelativePath}`
+  // Locate the vault root within the content-dir path. Quartz doesn't tell us
+  // where the vault is; we rely on the convention that the vault folder on
+  // disk is named to match `vaultName`. Everything between the vault folder
+  // and the content dir is the full subpath we need to prefix — including
+  // nested cases like `-d $VAULT/wiki/compiled`. Use the first occurrence so
+  // a same-named inner folder doesn't shadow the true vault root.
+  const marker = `/${vaultName}/`
+  const markerIdx = contentDir.indexOf(marker)
+  if (markerIdx === -1) return normalizedRelativePath
+  const subPath = contentDir.slice(markerIdx + marker.length).replace(/\/+$/, "")
+  if (!subPath) return normalizedRelativePath
+  return `${subPath}/${normalizedRelativePath}`
 }
 
 export default ((opts?: Partial<EditInObsidianOptions>) => {
