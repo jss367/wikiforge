@@ -85,19 +85,22 @@ The `preferences` list and `topics.<slug>.notes` list are passed verbatim to the
 
 ### Incremental-skip decision (per topic, evaluated before Phase 3)
 
-For each topic, decide RECOMPILE or SKIP. The decision must invalidate correctly on three independent axes: source-file set changes, source-file content changes, and config changes scoped to this topic.
+For each topic, decide RECOMPILE or SKIP. The decision must invalidate correctly on four independent axes: source-file set changes, source-file content changes, config changes scoped to this topic, and changes to the compiler itself (plugin version or skill instructions).
 
 **State the skip decision needs (stored per topic in `.compile-state.json` from the last compile):**
 - `topics.<slug>.sources`: sorted list of source file paths included last compile
 - `topics.<slug>.config_hash`: hash of the config subtree that influenced this topic last compile — specifically `preferences` (global) + `topics.<slug>` (this topic's entry), including its `sources`, `exclude`, and `notes`
 
-**Plus one global state field:**
+**Plus global state fields:**
 - `schema_hash`: hash of schema-level fields that affect all topics — `article_sections`, `mode`, `output`, `link_style`, and any other cross-cutting config that changes what every compile emits
+- `plugin_version`: the `version` field from `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` at last compile
+- `skill_hash`: SHA-256 (first 16 hex chars is fine) of `${CLAUDE_PLUGIN_ROOT}/skills/wiki-compiler/SKILL.md` at last compile. Catches heuristic changes that ship without a version bump.
 
 **Global gates applied before the per-topic loop:**
 
 - If `--topic <slug>` was passed, restrict the entire compile to that one slug. Every other topic is skipped without any further evaluation. The per-topic loop below runs for exactly one topic, and step 2 below fires for it.
 - If `--force` was passed with no `--topic`, every topic enters the loop and hits step 2.
+- **Compiler-version change:** Read the current `plugin_version` and compute the current `skill_hash`. If *either* differs from the stored values, treat this as a global invalidation — every topic enters the loop and hits step 2 (RECOMPILE). Surface it in the completion summary: "Compiler updated since last compile — full rebuild." This gate does not apply when `--topic <slug>` was passed (the user has explicitly scoped the run).
 
 **Decision (per topic in the restricted loop):**
 
@@ -109,10 +112,11 @@ For each topic, decide RECOMPILE or SKIP. The decision must invalidate correctly
 6. **Source-content change?** For each current source, compare its `mtime` to the compiled hub's `mtime` at `{output}/topics/{slug}.md`. If any source is newer → RECOMPILE.
 7. **None of the above triggered?** → SKIP. Report as "unchanged, skipped".
 
-**Note on global config changes:**
+**Note on global config and compiler changes:**
 - A change to `preferences` (the global list) changes every topic's `config_hash` (since each hash includes `preferences`), so it correctly invalidates all topics.
 - A change to a single `topics.<slug>` entry only changes that topic's `config_hash`.
 - Schema-level changes (e.g. `article_sections`, `mode`, `output`) should invalidate all topics — include them in the hash or force a full recompile when they change.
+- Plugin version bumps and edits to `SKILL.md` invalidate all topics via the compiler-version gate above. This is load-bearing for getting heuristic changes to propagate retroactively to topics that were already compiled under older rules. **Bump `version` in `plugin.json` whenever compiler logic or editorial rules change** — otherwise users on a stale cached install will silently run old instructions. The `skill_hash` check is a belt-and-braces backup for the common case where someone edits `SKILL.md` without remembering to bump the version.
 
 **Persisting the state (in Phase 5):**
 
@@ -125,11 +129,14 @@ After each topic is compiled, update `.compile-state.json`:
       "config_hash": "<hash>",
       "last_compiled": "2026-04-20T12:34:56Z"
     }
-  }
+  },
+  "schema_hash": "<hash>",
+  "plugin_version": "2.1.0",
+  "skill_hash": "<first 16 hex chars of SHA-256>"
 }
 ```
 
-This rule is important for a vault with many topics: only the ones that actually changed cost LLM tokens to recompile. A quiet day updates zero topics. A source deletion or a single `topics.<slug>.notes` entry only invalidates the one affected topic.
+This rule is important for a vault with many topics: only the ones that actually changed cost LLM tokens to recompile. A quiet day updates zero topics. A source deletion or a single `topics.<slug>.notes` entry only invalidates the one affected topic — but a plugin version bump or `SKILL.md` edit invalidates all topics via the compiler-version gate.
 
 ### Phase 1b: Image inventory
 
@@ -462,12 +469,14 @@ Always regenerate index.md, even if no topics changed (it's cheap).
     }
   },
   "schema_hash": "{hash of schema-level config — article_sections, mode, output, link_style — used this compile}",
+  "plugin_version": "{version field from plugin.json at this compile}",
+  "skill_hash": "{first 16 hex chars of SHA-256 of SKILL.md at this compile}",
   "source_locations": ["{path1}", "{path2}", ...],
   "total_sources_scanned": {count}
 }
 ```
 
-For topics that were skipped in this run, preserve their existing entry unchanged. For topics that recompiled, update `sources`, `config_hash`, and `last_compiled`. For topics no longer present (removed from schema by user), remove their entry.
+Always write `plugin_version` and `skill_hash` on every compile (even when every topic was skipped), so a run that skipped all topics still captures the current compiler identity — otherwise a later compile won't detect a version change if no topic happened to be recompiled in between. For topics that were skipped in this run, preserve their existing entry unchanged. For topics that recompiled, update `sources`, `config_hash`, and `last_compiled`. For topics no longer present (removed from schema by user), remove their entry.
 
 ## Phase 6: Generate CONTEXT.md (codebase mode only, first run)
 
@@ -508,6 +517,7 @@ After compilation, show a summary to the user:
 - Total sources scanned
 - Any files that couldn't be classified
 - Any suggested new topics for next run
+- If the compiler-version gate fired and forced a full rebuild, call it out explicitly: "Compiler updated since last compile (v{old} → v{new}) — every topic was re-evaluated under the new rules."
 - Time taken
 
 ## Learning from user feedback
