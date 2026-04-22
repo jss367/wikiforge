@@ -18,7 +18,18 @@ import { toString } from "mdast-util-to-string"
 // (normalized) matches the frontmatter title. A mid-article heading that
 // happens to repeat the title is left alone — that's almost certainly a
 // deliberate section header, not a duplicated page title.
-const normalize = (s: string): string => s.toLowerCase().replace(/\s+/g, " ").trim()
+//
+// Normalization mirrors the slug→display transform in ArticleTitle.toTitleCase
+// so that a slug-style frontmatter title (`alignment-team`, `spike-v4_5`) is
+// recognized as a duplicate of the spelled-out body H1 (`# Alignment Team`,
+// `# Spike V4.5`). Without this, the renderer would title-case the slug for
+// display while the matcher kept comparing against the raw slug — and the
+// duplicate would slip through unnoticed.
+const normalize = (s: string): string => {
+  const lowered = s.toLowerCase().trim()
+  const spaced = /\s/.test(lowered) ? lowered : lowered.replace(/_/g, ".").replace(/-/g, " ")
+  return spaced.replace(/\s+/g, " ").trim()
+}
 
 export const StripDuplicateTitle: QuartzTransformerPlugin = () => ({
   name: "StripDuplicateTitle",
