@@ -487,7 +487,7 @@ For topics that were skipped in this run, preserve their existing entry unchange
 
 ## Phase 6: Generate CONTEXT.md (codebase mode only, first run)
 
-On the **first compile** (no prior `.compile-state.json`), generate `{output}/CONTEXT.md`:
+On the **first compile** (no prior `topics` entries in `.compile-state.json` — either because the file doesn't exist or because `/wiki-init` just created it in an empty state), generate `{output}/CONTEXT.md`:
 
 ```markdown
 ---
