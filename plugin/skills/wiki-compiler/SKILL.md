@@ -1,6 +1,6 @@
 ---
 name: wiki-compiler
-description: Core compilation algorithm for the LLM Wiki Compiler. Reads source files from configured directories and compiles them into topic-based wiki articles. Supports both knowledge mode (markdown files) and codebase mode (code repositories). Called by /wiki-compile command.
+description: Core compilation algorithm for Wikiforge. Reads source files from configured directories and compiles them into topic-based wiki articles. Supports both knowledge mode (markdown files) and codebase mode (code repositories). Called by /wiki-compile command.
 ---
 
 # Wiki Compiler — Compilation Algorithm

@@ -1,5 +1,5 @@
 {
-  "name": "llm-wiki-compiler",
+  "name": "wikiforge",
   "version": "2.1.0",
   "description": "Compile knowledge files or codebases into topic-based wikis with interactive knowledge graph visualization. Non-destructive, Obsidian-compatible, with staged adoption.",
   "author": {

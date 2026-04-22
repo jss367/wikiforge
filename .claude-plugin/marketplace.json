@@ -1,11 +1,11 @@
 {
-  "name": "llm-wiki-compiler",
+  "name": "wikiforge",
   "owner": {
     "name": "jss367"
   },
   "plugins": [
     {
-      "name": "llm-wiki-compiler",
+      "name": "wikiforge",
       "source": "./plugin",
       "description": "Compile knowledge files or codebases into topic-based wikis with interactive knowledge graph visualization. Non-destructive, Obsidian-compatible, Wikipedia-style hub-and-spoke output."
     }

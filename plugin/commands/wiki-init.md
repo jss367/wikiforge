@@ -204,7 +204,7 @@ Scan the project for markdown-heavy directories. Look for:
 Present findings conversationally:
 
 ```
-Welcome to LLM Wiki Compiler. I'll get you set up in about 5 questions.
+Welcome to Wikiforge. I'll get you set up in about 5 questions.
 
 I found {count} markdown files across your project:
 
