@@ -37,18 +37,21 @@ echo ""
 echo "Quartz setup complete."
 echo ""
 
-# Register the Claude Code plugin. Both commands are idempotent — safe to re-run.
-if command -v claude >/dev/null 2>&1; then
-  echo "Registering Claude Code plugin..."
-  claude plugin marketplace add "$REPO_ROOT"
-  claude plugin install wikiforge@wikiforge
-  echo ""
-  echo "Plugin registered. Restart Claude Code to load the new commands and hooks."
+# Wire up the Claude Code wrapper. `claude-wf` launches Claude Code with
+# this repo's plugin/ loaded live via --plugin-dir, so edits show up
+# without any cache invalidation or version bumping. See scripts/claude-wf.sh.
+WRAPPER_SRC="$REPO_ROOT/scripts/claude-wf.sh"
+WRAPPER_DST="$HOME/bin/claude-wf"
+if [ -d "$HOME/bin" ] || mkdir -p "$HOME/bin" 2>/dev/null; then
+  if [ -e "$WRAPPER_DST" ] && [ ! -L "$WRAPPER_DST" ]; then
+    echo "$WRAPPER_DST exists and is not a symlink — leaving it alone."
+  else
+    ln -sf "$WRAPPER_SRC" "$WRAPPER_DST"
+    echo "Wrapper symlinked: $WRAPPER_DST -> $WRAPPER_SRC"
+  fi
 else
-  echo "Claude Code CLI ('claude') not found on PATH — skipping plugin registration."
-  echo "Install Claude Code, then re-run this script, or register manually:"
-  echo "    claude plugin marketplace add $REPO_ROOT"
-  echo "    claude plugin install wikiforge@wikiforge"
+  echo "Could not create ~/bin; link the wrapper manually:"
+  echo "    ln -sf $WRAPPER_SRC /some/dir/on/PATH/claude-wf"
 fi
 
 echo ""
@@ -56,11 +59,19 @@ echo "Next steps:"
 echo "  1. Sign in to Obsidian Sync on this machine and pair with your vault."
 echo "     Default vault path: ~/Documents/Obsidian Vault"
 echo ""
-echo "  2. Serve the compiled wiki:"
-echo "       bash $REPO_ROOT/scripts/wiki-serve.sh compiled"
-echo "     (or /wiki-serve from inside Claude Code)"
+echo "  2. Run 'claude-wf' (make sure ~/bin is on your PATH) to start Claude"
+echo "     Code with wikiforge loaded. Use '/reload-plugins' inside a session"
+echo "     to pick up edits to plugin/ without restarting."
 echo ""
-echo "  Future wikiforge updates: git pull, then 'claude plugin update wikiforge'"
-echo "  to refresh the plugin cache. Quartz overlay is re-applied automatically"
-echo "  by wiki-serve.sh on every serve."
+echo "  3. Serve the compiled wiki:"
+echo "       bash $REPO_ROOT/scripts/wiki-serve.sh compiled"
+echo "     (or /wiki-serve from inside a claude-wf session)"
+echo ""
+echo "  Future wikiforge updates: just 'git pull'. Nothing else to do —"
+echo "  'claude-wf' always reads the current checkout, and wiki-serve.sh"
+echo "  re-applies the Quartz overlay automatically."
+echo ""
+echo "  To distribute wikiforge to someone else (or install it as a"
+echo "  managed marketplace plugin on this machine), see the 'Sharing"
+echo "  wikiforge' section of the README."
 echo ""
