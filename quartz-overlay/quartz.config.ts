@@ -1,6 +1,7 @@
 import { QuartzConfig } from "./quartz/cfg"
 import * as Plugin from "./quartz/plugins"
 import { AbsoluteInternalLinks } from "./quartz/plugins/transformers/absoluteInternalLinks"
+import { StripDuplicateTitle } from "./quartz/plugins/transformers/stripDuplicateTitle"
 
 /**
  * Quartz 4 Configuration
@@ -55,6 +56,10 @@ const config: QuartzConfig = {
   plugins: {
     transformers: [
       Plugin.FrontMatter(),
+      // Runs right after FrontMatter so frontmatter.title is populated, and
+      // before TableOfContents / Description so the duplicate H1 doesn't
+      // leak into the sidebar TOC or the meta-description.
+      StripDuplicateTitle(),
       Plugin.CreatedModifiedDate({
         priority: ["frontmatter", "git", "filesystem"],
       }),
