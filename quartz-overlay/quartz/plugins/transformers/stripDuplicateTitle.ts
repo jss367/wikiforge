@@ -1,6 +1,8 @@
 import { QuartzTransformerPlugin } from "../types"
 import { Root } from "mdast"
 import { toString } from "mdast-util-to-string"
+import Slugger from "github-slugger"
+import { toTitleCase } from "../../util/title"
 
 // Quartz's ArticleTitle component renders an <h1> from frontmatter.title on
 // every content page. If the source markdown *also* starts with a body H1
@@ -60,12 +62,19 @@ export const StripDuplicateTitle: QuartzTransformerPlugin = () => ({
         if (normalize(toString(first)) !== normalizedTitle) return
 
         tree.children.splice(idx, 1)
-        // Signal to ArticleTitle that the body H1 carrying this page's
-        // anchor target is gone, so it's safe for the component to claim
-        // that id on the rendered title without duplicating an id that
-        // heading-id generation would otherwise produce for a still-present
-        // body heading.
-        file.data.strippedDuplicateTitle = true
+
+        // Signal to ArticleTitle that it can safely claim the anchor slug
+        // for the title — but only if no surviving heading would slug to
+        // the same id under heading-id generation. Otherwise we'd ship
+        // duplicate DOM ids and `#slug` would target the title instead of
+        // the section the user actually meant.
+        const titleSlug = new Slugger().slug(toTitleCase(title))
+        const collides = tree.children.some(
+          (n) => n.type === "heading" && new Slugger().slug(toString(n)) === titleSlug,
+        )
+        if (!collides) {
+          file.data.strippedDuplicateTitle = true
+        }
       },
     ]
   },
