@@ -301,7 +301,7 @@ Specifically, sub-pages should be created for:
 
 Merge related files into one sub-article ONLY when they're clearly variants of the same thing (e.g., `nand-routing-spike-v4-design.md` and `nand-routing-spike-v4_1-design.md` → one `spike-v4` sub-page). Bias toward more sub-pages, not fewer — a substantial file folded into a hub section becomes invisible. One-paragraph stubs (≲30 lines with no real content beyond a pointer) can be linked inline from the hub instead.
 
-Target: 5–20 sub-articles per topic depending on topic size. Erring on the high side is fine — sub-pages are cheap, and missed pages are expensive (the content stops being findable). The substance-based rule above is sufficient on its own; do not skip sub-pages for a topic just because it has few source files. A topic with three substantial 150-line design docs gets three sub-pages; a topic whose source files are all short stubs naturally produces zero sub-pages and is linked from the hub directly.
+Target: 5–20 sub-articles per topic depending on topic size. Erring on the high side is fine — sub-pages are cheap, and missed pages are expensive (the content stops being findable). The substance-based rule above is sufficient on its own; do not skip sub-pages for a topic just because it has few source files. A topic with three substantial 150-line design docs gets three sub-pages; a topic whose only source files are short non-decision stubs naturally produces zero sub-pages and is linked from the hub directly. Decision records are exempt from the short-stub exclusion — every `decisions/*.md` file gets its own sub-page regardless of length, per the rule above.
 
 ### Writing sub-articles
 
