@@ -1,5 +1,6 @@
 import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
 import { classNames } from "../util/lang"
+import Slugger from "github-slugger"
 
 // Slug-like titles (no spaces) get transformed to a title-cased display form:
 //   - underscore → dot (so `spike-v4_5` → `Spike V4.5`, matching the way users
@@ -22,7 +23,13 @@ function toTitleCase(raw: string): string {
 const ArticleTitle: QuartzComponent = ({ fileData, displayClass }: QuartzComponentProps) => {
   const title = fileData.frontmatter?.title
   if (title) {
-    return <h1 class={classNames(displayClass, "article-title")}>{toTitleCase(title)}</h1>
+    const displayed = toTitleCase(title)
+    // Give the rendered title an id that matches the slug github-slugger
+    // would have produced for the equivalent body H1. Keeps pre-existing
+    // deep links like `.../page#alignment-team` working after
+    // StripDuplicateTitle removes the corresponding body H1.
+    const id = new Slugger().slug(displayed)
+    return <h1 id={id} class={classNames(displayClass, "article-title")}>{displayed}</h1>
   } else {
     return null
   }

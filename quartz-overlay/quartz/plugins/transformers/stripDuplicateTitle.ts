@@ -41,14 +41,25 @@ export const StripDuplicateTitle: QuartzTransformerPlugin = () => ({
         const normalizedTitle = normalize(title)
         if (!normalizedTitle) return
 
-        const firstHeadingIdx = tree.children.findIndex((n) => n.type === "heading")
-        if (firstHeadingIdx === -1) return
-
-        const first = tree.children[firstHeadingIdx]
-        if (first.type !== "heading" || first.depth !== 1) return
+        // Only strip when the H1 is the *first* content block. If prose or
+        // anything else precedes it, the `# Title` is acting as a real
+        // section header, not a duplicated page title.
+        //
+        // Skip past leading frontmatter metadata nodes that Quartz's
+        // FrontMatter plugin leaves in the tree (`yaml`, `toml`) — those
+        // don't render, so the H1 that follows them is still "first".
+        let idx = 0
+        while (
+          idx < tree.children.length &&
+          (tree.children[idx].type === "yaml" || tree.children[idx].type === "toml")
+        ) {
+          idx++
+        }
+        const first = tree.children[idx]
+        if (!first || first.type !== "heading" || first.depth !== 1) return
         if (normalize(toString(first)) !== normalizedTitle) return
 
-        tree.children.splice(firstHeadingIdx, 1)
+        tree.children.splice(idx, 1)
       },
     ]
   },
