@@ -23,8 +23,12 @@ set -e
 
 MANIFEST="plugin/.claude-plugin/plugin.json"
 
-# Only run if any plugin/ files are staged.
-if ! git diff --cached --name-only | grep -q '^plugin/'; then
+# Only run if any plugin/ files are staged. Use --name-status (which shows
+# both sides of a rename) and match any tab-separated path field starting
+# with "plugin/", so a staged `git mv plugin/a.md docs/a.md` (rename out
+# of plugin/) is caught even though --name-only would report only the
+# destination path. The $'\t' in the pattern is a literal tab.
+if ! git diff --cached --name-status | grep -q $'\tplugin/'; then
   exit 0
 fi
 
@@ -85,7 +89,29 @@ if [ -n "$BASE_VERSION" ] && [ "$BASE_VERSION" != "$INDEX_VERSION" ]; then
   exit 0
 fi
 
-IFS='.' read -r MAJOR MINOR PATCH <<< "$INDEX_VERSION"
+version_key() {
+  # Encode a major.minor.patch version as a zero-padded integer so two
+  # values sort the same numerically as they would semver-wise. Assumes
+  # each component < 1000 (fine for our cadence).
+  local a b c
+  IFS='.' read -r a b c <<< "$1"
+  printf '%03d%03d%03d' "$a" "$b" "$c"
+}
+
+# Bump from max(INDEX_VERSION, MAIN_VERSION), not just INDEX_VERSION. A
+# stale branch cut at 1.0.0 while main advanced to 1.0.1 would otherwise
+# produce NEW=1.0.1 — colliding with main's existing version. Merging
+# would leave main at 1.0.1 with new plugin content, and clients already
+# on 1.0.1 would miss the update entirely. Taking the max ensures NEW is
+# always strictly greater than both the branch's current version and
+# main's current version.
+MAIN_VERSION=$(git show "origin/main:$MANIFEST" 2>/dev/null | parse_version || true)
+BASELINE="$INDEX_VERSION"
+if [ -n "$MAIN_VERSION" ] && [ "$(version_key "$MAIN_VERSION")" -gt "$(version_key "$BASELINE")" ]; then
+  BASELINE="$MAIN_VERSION"
+fi
+
+IFS='.' read -r MAJOR MINOR PATCH <<< "$BASELINE"
 NEW="$MAJOR.$MINOR.$((PATCH + 1))"
 
 # Bump the INDEX directly so the committed blob has the new version
