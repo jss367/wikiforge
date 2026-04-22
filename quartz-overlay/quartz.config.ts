@@ -1,5 +1,6 @@
 import { QuartzConfig } from "./quartz/cfg"
 import * as Plugin from "./quartz/plugins"
+import { AbsoluteInternalLinks } from "./quartz/plugins/transformers/absoluteInternalLinks"
 
 /**
  * Quartz 4 Configuration
@@ -68,6 +69,12 @@ const config: QuartzConfig = {
       Plugin.GitHubFlavoredMarkdown(),
       Plugin.TableOfContents(),
       Plugin.CrawlLinks({ markdownLinkResolution: "shortest" }),
+      // Runs AFTER CrawlLinks so it operates on the post-transform hrefs.
+      // Converts internal relative URLs (./… and ../…) emitted by Quartz
+      // into root-absolute form (/…). Without this, internal navigation
+      // and asset refs break on hub pages served at trailing-slash URLs
+      // like /topics/foo/ (which breadcrumbs link to by default).
+      AbsoluteInternalLinks(),
       Plugin.Description(),
       Plugin.Latex({ renderEngine: "katex" }),
     ],
