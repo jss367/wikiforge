@@ -290,15 +290,18 @@ After the hub article for a topic is compiled, identify natural **sub-topic clus
 
 ### Identifying sub-articles
 
-A sub-article should exist for each coherent, substantial unit in the source material. Natural candidates:
+The default rule: **every substantial standalone source file (≳100 lines of self-contained content) gets its own sub-page**, unless it's clearly a variant of another file. Don't filter by what *kind* of unit the file is — filter by whether it carries a coherent, sub-page-sized argument that a reader would want to land on directly.
+
+Specifically, sub-pages should be created for:
 - Individual named experiments (e.g., a `spike-v3/` directory, a `flux-klein-v01-design.md` file)
-- Individual decision records (`decisions/*.md` — one sub-page per decision)
+- **Every individual decision record** (`decisions/*.md` — one sub-page per decision, even short ones; the dated filename is the sub-slug). Decisions are the load-bearing why-records of the project and must remain individually addressable.
 - Individual concept notes (`concepts/*.md` — one sub-page per concept)
 - Named tracks / workstreams (a group of related files covering one research track)
+- **Cross-cutting design, rationale, reference, and strategy documents** that span multiple units (e.g., a `proxy-experiment-design.md` covering V01–V05, a `dataset-strategy.md`, a `training-cost-reference.md`). These are the easiest category to miss because they don't slot into the named-unit categories above — but they're often the most reused parts of the wiki. If the file reads like a Wikipedia reference article in its own right, it gets a sub-page.
 
-Merge related files into one sub-article when they're clearly variants of the same thing (e.g., `nand-routing-spike-v4-design.md` and `nand-routing-spike-v4_1-design.md` → one `spike-v4` sub-page). Don't force a sub-article for every tiny file; one-paragraph stubs should be linked inline from the hub instead.
+Merge related files into one sub-article ONLY when they're clearly variants of the same thing (e.g., `nand-routing-spike-v4-design.md` and `nand-routing-spike-v4_1-design.md` → one `spike-v4` sub-page). Bias toward more sub-pages, not fewer — a substantial file folded into a hub section becomes invisible. One-paragraph stubs (≲30 lines with no real content beyond a pointer) can be linked inline from the hub instead.
 
-Target: 5–15 sub-articles per topic depending on topic size. If a topic has fewer than ~5 source files, sub-articles may not be warranted; link source files directly from the hub.
+Target: 5–20 sub-articles per topic depending on topic size. Erring on the high side is fine — sub-pages are cheap, and missed pages are expensive (the content stops being findable). If a topic has fewer than ~5 source files, sub-articles may not be warranted; link source files directly from the hub.
 
 ### Writing sub-articles
 
