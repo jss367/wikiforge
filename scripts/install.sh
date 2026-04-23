@@ -40,17 +40,37 @@ echo ""
 # Wire up the Claude Code wrapper. `claude-wf` launches Claude Code with
 # this repo's plugin/ loaded live via --plugin-dir, so edits show up
 # without any cache invalidation or version bumping. See scripts/claude-wf.sh.
+#
+# Pick a destination that's already on PATH. Prefer ~/.local/bin (the XDG
+# standard); fall back to ~/bin if that's what's configured. If neither
+# is on PATH, default to ~/.local/bin and tell the user they'll need to
+# add it — silently creating a symlink in a directory git won't find
+# would leave `claude-wf` broken with no obvious explanation.
 WRAPPER_SRC="$REPO_ROOT/scripts/claude-wf.sh"
-WRAPPER_DST="$HOME/bin/claude-wf"
-if [ -d "$HOME/bin" ] || mkdir -p "$HOME/bin" 2>/dev/null; then
+WRAPPER_DST=""
+PATH_WARN=""
+# Match both forms (with and without trailing slash); a PATH entry like
+# "$HOME/bin/" is legitimate and would otherwise fall through to the
+# default branch.
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*|*":$HOME/.local/bin/:"*) WRAPPER_DST="$HOME/.local/bin/claude-wf" ;;
+  *":$HOME/bin:"*|*":$HOME/bin/:"*)               WRAPPER_DST="$HOME/bin/claude-wf" ;;
+  *)
+    WRAPPER_DST="$HOME/.local/bin/claude-wf"
+    PATH_WARN="$HOME/.local/bin is not on your PATH — add it to your shell profile for 'claude-wf' to resolve."
+    ;;
+esac
+WRAPPER_DIR="$(dirname "$WRAPPER_DST")"
+if mkdir -p "$WRAPPER_DIR" 2>/dev/null; then
   if [ -e "$WRAPPER_DST" ] && [ ! -L "$WRAPPER_DST" ]; then
     echo "$WRAPPER_DST exists and is not a symlink — leaving it alone."
   else
     ln -sf "$WRAPPER_SRC" "$WRAPPER_DST"
     echo "Wrapper symlinked: $WRAPPER_DST -> $WRAPPER_SRC"
   fi
+  [ -n "$PATH_WARN" ] && echo "  NOTE: $PATH_WARN"
 else
-  echo "Could not create ~/bin; link the wrapper manually:"
+  echo "Could not create $WRAPPER_DIR; link the wrapper manually:"
   echo "    ln -sf $WRAPPER_SRC /some/dir/on/PATH/claude-wf"
 fi
 
@@ -59,9 +79,9 @@ echo "Next steps:"
 echo "  1. Sign in to Obsidian Sync on this machine and pair with your vault."
 echo "     Default vault path: ~/Documents/Obsidian Vault"
 echo ""
-echo "  2. Run 'claude-wf' (make sure ~/bin is on your PATH) to start Claude"
-echo "     Code with wikiforge loaded. Use '/reload-plugins' inside a session"
-echo "     to pick up edits to plugin/ without restarting."
+echo "  2. Run 'claude-wf' to start Claude Code with wikiforge loaded. Use"
+echo "     '/reload-plugins' inside a session to pick up edits to plugin/"
+echo "     without restarting."
 echo ""
 echo "  3. Serve the compiled wiki:"
 echo "       bash $REPO_ROOT/scripts/wiki-serve.sh compiled"
