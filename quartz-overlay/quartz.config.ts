@@ -72,6 +72,11 @@ const config: QuartzConfig = {
       }),
       Plugin.ObsidianFlavoredMarkdown({ enableInHtmlEmbed: false }),
       Plugin.GitHubFlavoredMarkdown(),
+      // Match Obsidian's default "strict line breaks: off" reader behavior:
+      // a single newline in the source renders as a <br>. Without this,
+      // commonmark collapses single newlines within a paragraph into spaces,
+      // so two authored lines render as one.
+      Plugin.HardLineBreaks(),
       Plugin.TableOfContents(),
       // "relative" preserves page-relative paths for markdown images and
       // regular markdown links so AbsoluteInternalLinks (below) can resolve
