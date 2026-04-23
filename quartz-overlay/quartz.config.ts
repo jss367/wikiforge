@@ -73,7 +73,17 @@ const config: QuartzConfig = {
       Plugin.ObsidianFlavoredMarkdown({ enableInHtmlEmbed: false }),
       Plugin.GitHubFlavoredMarkdown(),
       Plugin.TableOfContents(),
-      Plugin.CrawlLinks({ markdownLinkResolution: "shortest" }),
+      // "relative" preserves page-relative paths for markdown images and
+      // regular markdown links so AbsoluteInternalLinks (below) can resolve
+      // them correctly against the current page slug. "shortest" — Quartz's
+      // default — tries to match link targets by filename against allSlugs,
+      // but image files aren't in allSlugs, so they fall through to a
+      // vault-root-relative computation that mangles page-relative paths
+      // like `subdir/image.png` into `../../../subdir/image.png`, producing
+      // wrong URLs after AbsoluteInternalLinks resolves them. Wikilinks
+      // `[[foo]]` and Obsidian embeds `![[foo]]` are handled by the
+      // ObsidianFlavoredMarkdown transformer and are unaffected.
+      Plugin.CrawlLinks({ markdownLinkResolution: "relative" }),
       // Runs AFTER CrawlLinks so it operates on the post-transform hrefs.
       // Converts internal relative URLs (./… and ../…) emitted by Quartz
       // into root-absolute form (/…). Without this, internal navigation
