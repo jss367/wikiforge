@@ -133,11 +133,19 @@ run_quartz() {
   # it hits ENOENT on a just-moved path and exits non-zero. Restart it so
   # the user doesn't have to re-run the script. A real Ctrl+C sets `quit=1`
   # via the trap so we exit cleanly instead of looping forever.
+  #
+  # Only runtime crashes are restarted. If Quartz dies within
+  # MIN_HEALTHY_SECS of launching, treat it as an unrecoverable startup
+  # failure (port already in use, missing/broken bootstrap, bad args) and
+  # propagate the exit status — otherwise the loop would spin forever on a
+  # deterministic error, drowning the real cause in restart noise.
   local port=$1 content_dir=$2
   cd "$QUARTZ" || exit 1
-  local quit=0 pid rc
+  local quit=0 pid rc started_at now uptime
+  local MIN_HEALTHY_SECS=5
   trap 'quit=1; [ -n "${pid:-}" ] && kill_subtree "$pid"' INT TERM
   while :; do
+    started_at=$SECONDS
     node ./quartz/bootstrap-cli.mjs build --serve --port "$port" -d "$content_dir" &
     pid=$!
     # `wait` returns the child's exit status, but `set -e` would abort the
@@ -148,7 +156,13 @@ run_quartz() {
     if [ "$quit" -eq 1 ]; then
       exit 130
     fi
-    echo "[wiki-serve] Quartz exited (status $rc) — restarting in 1s. Ctrl+C to quit." >&2
+    now=$SECONDS
+    uptime=$((now - started_at))
+    if [ "$uptime" -lt "$MIN_HEALTHY_SECS" ]; then
+      echo "[wiki-serve] Quartz exited (status $rc) after ${uptime}s — looks like a startup failure, not a runtime crash. Not restarting." >&2
+      exit "$rc"
+    fi
+    echo "[wiki-serve] Quartz exited (status $rc) after ${uptime}s — restarting in 1s. Ctrl+C to quit." >&2
     sleep 1
   done
 }
