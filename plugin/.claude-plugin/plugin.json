@@ -1,16 +1,16 @@
 {
   "name": "wikiforge",
-  "version": "2.1.0",
-  "description": "Compile knowledge files or codebases into topic-based wikis with interactive knowledge graph visualization. Non-destructive, Obsidian-compatible, with staged adoption.",
+  "version": "3.0.0",
+  "description": "Clean up Obsidian notes in place: normalize whitespace, standardize list markers, and scaffold YAML frontmatter with LLM-assisted tag suggestions. Preview every change as a diff before anything is written to disk.",
   "author": {
     "name": "Sumant"
   },
   "keywords": [
-    "wiki",
-    "knowledge-base",
-    "compilation",
     "obsidian",
     "markdown",
-    "context-optimization"
+    "cleanup",
+    "normalize",
+    "frontmatter",
+    "personal-knowledge"
   ]
 }

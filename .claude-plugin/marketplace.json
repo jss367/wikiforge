@@ -7,7 +7,7 @@
     {
       "name": "wikiforge",
       "source": "./plugin",
-      "description": "Compile knowledge files or codebases into topic-based wikis with interactive knowledge graph visualization. Non-destructive, Obsidian-compatible, Wikipedia-style hub-and-spoke output."
+      "description": "Clean up Obsidian notes in place: normalize whitespace, standardize list markers, and scaffold YAML frontmatter. Preview every change as a diff before writing. Also ships a Quartz-powered browser view of your vault."
     }
   ]
 }

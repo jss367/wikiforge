@@ -155,7 +155,7 @@ serve_on_ports() {
       ;;
     compiled)
       [ -d "$vault_path/wiki" ] || {
-        echo "No compiled wiki at $vault_path/wiki — run /wiki-compile first." >&2
+        echo "No legacy compile output at $vault_path/wiki — this mode serves whatever's in that directory from the old compile tool. Use 'raw' mode instead to serve the whole vault." >&2
         exit 1
       }
       echo "Serving COMPILED wiki at http://localhost:$compiled_port"
