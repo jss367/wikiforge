@@ -5,14 +5,20 @@
 # so URLs stay stable across restarts and bookmarks don't drift.
 #
 # Usage:
-#   wiki-serve.sh <name> [raw|compiled|both]     Serve a registered vault (default mode: compiled)
+#   wiki-serve.sh <name> [raw|compiled|both]     Serve a registered vault (default mode: raw)
 #   wiki-serve.sh --add <name> <vault-path>      Register a vault; auto-assigns next free port
 #   wiki-serve.sh --list                         Show registered vaults
 #   wiki-serve.sh --rm <name>                    Unregister a vault
 #   wiki-serve.sh [raw|compiled|both]            Back-compat: serve $VAULT on 8080/8081
 #
-# Each vault gets one compiled-wiki port; raw is served at (compiled_port - 1).
-# Registered vaults start at 8081 and step by 2 (next vault gets 8083, then 8085, …).
+# The default mode is now `raw` — Quartz serves the vault's markdown
+# directly. `compiled` still works if a wiki/ folder exists, but the LLM
+# compile step (plugin/skills/wiki-compiler) is deprecated in favour of
+# serving raw Obsidian content as-is.
+#
+# Each vault gets one raw port and one compiled port. Registered vaults
+# start at 8081 and step by 2 (next vault gets 8083, then 8085, …); raw
+# is served at (compiled_port - 1).
 #
 # Config: ~/.config/wikiforge/vaults.json
 # Env overrides: QUARTZ (default: ~/Documents/wiki-quartz), VAULT (legacy only).
@@ -180,7 +186,7 @@ serve_on_ports() {
 serve_vault() {
   require_jq
   ensure_config
-  local name="$1" mode="${2:-compiled}"
+  local name="$1" mode="${2:-raw}"
   local info
   info="$(vault_lookup "$name")"
   if [ -z "$info" ]; then
@@ -195,7 +201,7 @@ serve_vault() {
 }
 
 legacy_serve() {
-  local mode="${1:-compiled}"
+  local mode="${1:-raw}"
   local vault="${VAULT:-$HOME/Documents/Obsidian Vault}"
   serve_on_ports "$vault" 8081 "$mode"
 }
@@ -205,7 +211,7 @@ show_help() {
 wiki-serve.sh — serve Obsidian vaults / compiled wikis locally with Quartz.
 
 Usage:
-  $0 <name> [raw|compiled|both]     Serve a registered vault (default mode: compiled)
+  $0 <name> [raw|compiled|both]     Serve a registered vault (default mode: raw)
   $0 --add <name> <vault-path>      Register a vault; auto-assigns next free port
   $0 --list                         Show registered vaults
   $0 --rm <name>                    Unregister a vault
