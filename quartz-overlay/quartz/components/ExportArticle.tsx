@@ -118,15 +118,23 @@ const ExportArticle: QuartzComponent = ({ fileData }: QuartzComponentProps) => {
   // file — there's nothing meaningful to export from them.
   if (!fileData.filePath) return null
 
+  // Float right and render an icon-only link so the button tucks into the
+  // top-right of the article without taking its own vertical line. The
+  // title/breadcrumbs flow wraps around it.
   return (
-    <p class="export-article" style="margin: 0.25em 0; font-size: 0.85em;">
+    <p
+      class="export-article"
+      style="float: right; margin: 0; font-size: 1.1em; line-height: 1;"
+    >
       <a
         href="#"
         class="export-article-btn"
         role="button"
-        style="text-decoration: none; color: var(--secondary); cursor: pointer;"
+        title="Export this page as a standalone HTML file"
+        aria-label="Export this page"
+        style="text-decoration: none; color: var(--secondary); cursor: pointer; padding: 0.25em 0.4em;"
       >
-        ⤓ Export this page
+        ⤓
       </a>
     </p>
   )

@@ -34,6 +34,9 @@ export const sharedPageComponents: SharedLayout = {
 // components for pages that display a single page (e.g. a single note)
 export const defaultContentPageLayout: PageLayout = {
   beforeBody: [
+    // ExportArticle is first so its `float: right` lands at the top-right
+    // of the content column; the breadcrumbs/title below wrap around it.
+    ExportArticle(),
     Component.ConditionalRender({
       component: Component.Breadcrumbs(),
       condition: (page) => page.fileData.slug !== "index",
@@ -42,7 +45,6 @@ export const defaultContentPageLayout: PageLayout = {
     Component.ContentMeta(),
     Component.TagList(),
     EditInObsidian(),
-    ExportArticle(),
   ],
   afterBody: [LastEdited()],
   left: [
@@ -75,11 +77,11 @@ export const defaultContentPageLayout: PageLayout = {
 // frontmatter field, the component returns null and renders nothing.
 export const defaultListPageLayout: PageLayout = {
   beforeBody: [
+    ExportArticle(),
     Component.Breadcrumbs(),
     Component.ArticleTitle(),
     Component.ContentMeta(),
     EditInObsidian(),
-    ExportArticle(),
   ],
   afterBody: [LastEdited()],
   left: [
