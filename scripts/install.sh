@@ -49,9 +49,12 @@ echo ""
 WRAPPER_SRC="$REPO_ROOT/scripts/claude-wf.sh"
 WRAPPER_DST=""
 PATH_WARN=""
+# Match both forms (with and without trailing slash); a PATH entry like
+# "$HOME/bin/" is legitimate and would otherwise fall through to the
+# default branch.
 case ":$PATH:" in
-  *":$HOME/.local/bin:"*) WRAPPER_DST="$HOME/.local/bin/claude-wf" ;;
-  *":$HOME/bin:"*)        WRAPPER_DST="$HOME/bin/claude-wf" ;;
+  *":$HOME/.local/bin:"*|*":$HOME/.local/bin/:"*) WRAPPER_DST="$HOME/.local/bin/claude-wf" ;;
+  *":$HOME/bin:"*|*":$HOME/bin/:"*)               WRAPPER_DST="$HOME/bin/claude-wf" ;;
   *)
     WRAPPER_DST="$HOME/.local/bin/claude-wf"
     PATH_WARN="$HOME/.local/bin is not on your PATH — add it to your shell profile for 'claude-wf' to resolve."
