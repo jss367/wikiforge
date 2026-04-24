@@ -3,7 +3,7 @@
   "version": "3.0.0",
   "description": "Clean up Obsidian notes in place: normalize whitespace, standardize list markers, and scaffold YAML frontmatter with LLM-assisted tag suggestions. Preview every change as a diff before anything is written to disk.",
   "author": {
-    "name": "Sumant"
+    "name": "Julius"
   },
   "keywords": [
     "obsidian",
