@@ -4,9 +4,9 @@ Serve a registered Obsidian vault via Quartz on a deterministic localhost port. 
 
 ## Usage
 
-`/wikiforge:wiki-serve` — serve the legacy default vault (`$VAULT` or `~/Documents/Obsidian Vault`) on :8081
-`/wikiforge:wiki-serve <name>` — serve a registered vault (compiled-output mode; points at `$vault/wiki/` if that directory exists from the legacy compile tool)
-`/wikiforge:wiki-serve <name> raw` — serve a registered vault's raw notes (typical daily use)
+`/wikiforge:wiki-serve` — serve the legacy default vault (`$VAULT` or `~/Documents/Obsidian Vault`) raw on :8080
+`/wikiforge:wiki-serve <name>` — serve a registered vault's raw notes (default mode; typical daily use)
+`/wikiforge:wiki-serve <name> compiled` — serve `$vault/wiki/` if that directory exists from the legacy compile tool
 `/wikiforge:wiki-serve <name> both` — serve raw and compiled-output modes side-by-side
 `/wikiforge:wiki-serve --list` — show registered vaults
 `/wikiforge:wiki-serve --add <name> <path>` — register a new vault (auto-assigns next free port)
