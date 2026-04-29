@@ -241,8 +241,28 @@ export const FolderPage: QuartzEmitterPlugin<Partial<FolderPageOptions>> = (user
       if (affectedFolders.size > 0) {
         const assetFiles = await findAssetFiles(ctx, assetExtensions)
         const allFiles = [...content.map((c) => c[1].data), ...assetFiles]
+
+        // A PDF (or note) being moved/deleted may leave its old folder
+        // empty. Re-emitting `index.html` for a folder that no longer has
+        // any content would create a phantom listing where none existed
+        // before — worse than the stale-page-on-delete behavior we inherit
+        // from upstream. Drop folders that aren't in the current file set.
+        const existingFolders: Set<SimpleSlug> = new Set(
+          allFiles.flatMap((data) =>
+            data.slug
+              ? _getFolders(data.slug).filter(
+                  (folderName) => folderName !== "." && folderName !== "tags",
+                )
+              : [],
+          ),
+        )
+        const foldersToEmit: Set<SimpleSlug> = new Set(
+          [...affectedFolders].filter((f) => existingFolders.has(f)),
+        )
+        if (foldersToEmit.size === 0) return
+
         ctx.trie = trieFromAllFiles(allFiles)
-        const folderInfo = computeFolderInfo(affectedFolders, content, cfg.locale)
+        const folderInfo = computeFolderInfo(foldersToEmit, content, cfg.locale)
         yield* processFolderInfo(ctx, folderInfo, allFiles, opts, resources)
       }
     },
