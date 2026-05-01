@@ -453,11 +453,16 @@ document.addEventListener("nav", () => {
       if (h2 !== -1) return !checked.has(h2)
       return false
     }
+    // Empty-text headings (e.g. \`##\` with no title) are skipped by
+    // populateSections, so the slicer must skip them too — otherwise pos
+    // drifts and a checkbox toggle removes the wrong section.
     Array.from(article.children).forEach((child) => {
       const tag = child.tagName
-      if (tag === "H2") {
+      const hasText = (tag === "H2" || tag === "H3")
+        && !!(child.textContent || "").trim()
+      if (tag === "H2" && hasText) {
         h2 = pos; h3 = -1; pos++
-      } else if (tag === "H3") {
+      } else if (tag === "H3" && hasText) {
         h3 = pos; pos++
       }
       if (excluded()) toRemove.push(child)
