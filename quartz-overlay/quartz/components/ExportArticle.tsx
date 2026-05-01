@@ -439,13 +439,18 @@ document.addEventListener("nav", () => {
     const article = clone.querySelector("article") || clone
     let h2 = -1, h3 = -1, pos = 0
     const toRemove = []
-    // A child is excluded iff its containing h2 (if any) or its containing
-    // h3 (if any) is unchecked. Content before any heading is the intro
-    // and is always kept — same rule the picker is built on.
+    // Each checkbox in the picker is its own filter. A node is included
+    // iff the most-specific heading containing it is checked: under an
+    // h3 → gate by that h3; otherwise under an h2 → gate by that h2;
+    // before any heading → intro, always kept.
+    //
+    // The h2-cascade UI is a bulk-set convenience, not a hierarchical
+    // veto: unchecking an h2 then re-checking one of its h3s means
+    // "drop the h2's prose but keep that one subsection," and that's
+    // what the slicer must honor.
     function excluded() {
-      if (h2 === -1 && h3 === -1) return false
-      if (h2 !== -1 && !checked.has(h2)) return true
-      if (h3 !== -1 && !checked.has(h3)) return true
+      if (h3 !== -1) return !checked.has(h3)
+      if (h2 !== -1) return !checked.has(h2)
       return false
     }
     Array.from(article.children).forEach((child) => {
@@ -486,7 +491,8 @@ document.addEventListener("nav", () => {
         fenceLen = fenceM[2].length
         continue
       }
-      if (/^(#{2,3})\\s+\\S/.test(line)) count++
+      // CommonMark allows up to 3 leading spaces before an ATX heading.
+      if (/^\\s{0,3}(#{2,3})\\s+\\S/.test(line)) count++
     }
     return count
   }
@@ -514,9 +520,10 @@ document.addEventListener("nav", () => {
     let h2 = -1, h3 = -1, pos = 0
 
     function shouldEmit() {
-      if (h2 === -1 && h3 === -1) return true
-      if (h2 !== -1 && !checked.has(h2)) return false
-      if (h3 !== -1 && !checked.has(h3)) return false
+      // Same most-specific-heading rule as filterClonedArticle —
+      // independent checkboxes, no parent-h2 veto over a checked h3.
+      if (h3 !== -1) return checked.has(h3)
+      if (h2 !== -1) return checked.has(h2)
       return true
     }
 
@@ -534,7 +541,7 @@ document.addEventListener("nav", () => {
         if (shouldEmit()) out.push(line)
         continue
       }
-      const hM = line.match(/^(#{1,6})\\s+(.+?)\\s*#*\\s*$/)
+      const hM = line.match(/^\\s{0,3}(#{1,6})\\s+(.+?)\\s*#*\\s*$/)
       if (hM) {
         const level = hM[1].length
         if (level === 2) { h2 = pos; h3 = -1; pos++ }
