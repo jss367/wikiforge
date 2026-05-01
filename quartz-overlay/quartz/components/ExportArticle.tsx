@@ -126,10 +126,19 @@ const ExportArticle: QuartzComponent = ({ fileData }: QuartzComponentProps) => {
       class="export-article"
       style="float: right; margin: 0; font-size: 1.1em; line-height: 1;"
     >
+      {/*
+        data-router-ignore tells Quartz's SPA router (spa.inline.ts) to skip
+        this link in its document-level click handler. Without it, clicking
+        the icon causes the router to navigate to the current URL and
+        re-render the page — the router doesn't check event.defaultPrevented,
+        so our own preventDefault() can't stop it. The export flow triggers a
+        download and never navigates, so opting out of routing is correct.
+      */}
       <a
         href="#"
         class="export-article-btn"
         role="button"
+        data-router-ignore="true"
         title="Export this page as a standalone HTML file"
         aria-label="Export this page"
         style="text-decoration: none; color: var(--secondary); cursor: pointer; padding: 0.25em 0.4em;"
