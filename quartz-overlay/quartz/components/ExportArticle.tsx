@@ -223,7 +223,11 @@ document.addEventListener("nav", () => {
   }
 
   function mdToNotebook(rawMd, titleText) {
-    let md = stripFrontmatter(rawMd).replace(/^\\s+/, "")
+    // Strip only leading *blank lines* (whitespace-only lines), not all
+    // leading whitespace — a document that opens with a 4-space-indented
+    // code block, a nested list, or a block-quote-aligned first line
+    // would otherwise have its first construct silently mangled.
+    let md = stripFrontmatter(rawMd).replace(/^(?:[ \\t]*\\r?\\n)+/, "")
 
     // If the markdown doesn't open with an H1, prepend the page title so the
     // notebook has a clear heading. Obsidian users frequently rely on the
