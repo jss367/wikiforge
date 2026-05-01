@@ -15,8 +15,11 @@ document.addEventListener("nav", () => {
   const onDocClick = (e) => {
     if (!root.contains(e.target)) close()
   }
+  // Only react when the menu is open — otherwise an Escape press anywhere
+  // (e.g. dismissing a search modal, leaving an input) would steal focus
+  // to the export icon on every page.
   const onKey = (e) => {
-    if (e.key === "Escape") { close(); summary.focus() }
+    if (e.key === "Escape" && root.open) { close(); summary.focus() }
   }
   document.addEventListener("click", onDocClick)
   document.addEventListener("keydown", onKey)
