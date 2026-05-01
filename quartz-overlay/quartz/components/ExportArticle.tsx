@@ -304,6 +304,13 @@ document.addEventListener("nav", () => {
     const a = document.createElement("a")
     a.href = url
     a.download = slugify(titleText) + "." + ext
+    // Quartz's SPA router has a window-level click listener that hijacks
+    // any same-origin <a> click without data-router-ignore. Blob URLs
+    // inherit the page's origin, so the synthetic click would otherwise
+    // be intercepted: HTML blobs get morphed into the current page, and
+    // ipynb blobs (non-text/html) fall through to window.location.assign,
+    // navigating to blob:… instead of triggering the download.
+    a.setAttribute("data-router-ignore", "")
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
