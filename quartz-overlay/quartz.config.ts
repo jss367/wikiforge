@@ -2,6 +2,7 @@ import { QuartzConfig } from "./quartz/cfg"
 import * as Plugin from "./quartz/plugins"
 import { AbsoluteInternalLinks } from "./quartz/plugins/transformers/absoluteInternalLinks"
 import { StripDuplicateTitle } from "./quartz/plugins/transformers/stripDuplicateTitle"
+import { RawMarkdown } from "./quartz/plugins/emitters/rawMarkdown"
 
 /**
  * Quartz 4 Configuration
@@ -111,6 +112,9 @@ const config: QuartzConfig = {
       }),
       Plugin.Assets(),
       Plugin.Static(),
+      // Mirrors each note's source .md alongside its rendered .html so the
+      // browser can fetch <slug>.md for the "Jupyter Notebook" export.
+      RawMarkdown(),
       Plugin.Favicon(),
       Plugin.NotFoundPage(),
     ],
