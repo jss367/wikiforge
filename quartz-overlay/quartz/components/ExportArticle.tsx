@@ -455,12 +455,17 @@ document.addEventListener("nav", () => {
     }
     // Empty-text headings (e.g. \`##\` with no title) are skipped by
     // populateSections, so the slicer must skip them too — otherwise pos
-    // drifts and a checkbox toggle removes the wrong section.
+    // drifts and a checkbox toggle removes the wrong section. An H1
+    // resets h2/h3 because the picker only tracks h2/h3 sections, so a
+    // following H1 must end the current section rather than absorb the
+    // next H1's content into the previous selection state.
     Array.from(article.children).forEach((child) => {
       const tag = child.tagName
-      const hasText = (tag === "H2" || tag === "H3")
+      const hasText = (tag === "H1" || tag === "H2" || tag === "H3")
         && !!(child.textContent || "").trim()
-      if (tag === "H2" && hasText) {
+      if (tag === "H1" && hasText) {
+        h2 = -1; h3 = -1
+      } else if (tag === "H2" && hasText) {
         h2 = pos; h3 = -1; pos++
       } else if (tag === "H3" && hasText) {
         h3 = pos; pos++
@@ -549,7 +554,12 @@ document.addEventListener("nav", () => {
       const hM = line.match(/^\\s{0,3}(#{1,6})\\s+(.+?)\\s*#*\\s*$/)
       if (hM) {
         const level = hM[1].length
-        if (level === 2) { h2 = pos; h3 = -1; pos++ }
+        // H1 isn't tracked by the picker, but it ends any open h2/h3 —
+        // otherwise content after a later H1 inherits the previous
+        // section's selection state (a real concern for concatenated
+        // notes that contain multiple H1s).
+        if (level === 1) { h2 = -1; h3 = -1 }
+        else if (level === 2) { h2 = pos; h3 = -1; pos++ }
         else if (level === 3) { h3 = pos; pos++ }
         if (shouldEmit()) out.push(line)
         continue
