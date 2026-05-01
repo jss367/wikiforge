@@ -113,9 +113,21 @@ document.addEventListener("nav", () => {
   function stripFrontmatter(md) {
     // YAML frontmatter: "---" on the first line, "---" or "..." on a later
     // line. Anything before the first "---" disqualifies it (keep verbatim).
+    // A leading "---" can also be a markdown thematic break that happens to
+    // be followed later by another "---" elsewhere in the doc, which would
+    // falsely match here and silently drop real content from the notebook.
+    // Only strip if the captured body is empty (empty frontmatter) or its
+    // first non-blank line looks YAML-shaped: a top-level "key:" entry.
+    // Frontmatter that's a YAML list (rare in practice — Obsidian / Quartz
+    // expect a mapping) won't match and will be left in the body, which is
+    // strictly safer than dropping content.
     if (!md.startsWith("---\\n") && !md.startsWith("---\\r\\n")) return md
-    const m = md.match(/^---\\r?\\n[\\s\\S]*?\\r?\\n(?:---|\\.\\.\\.)\\s*(?:\\r?\\n|$)/)
-    return m ? md.slice(m[0].length) : md
+    const m = md.match(/^---\\r?\\n([\\s\\S]*?)\\r?\\n(?:---|\\.\\.\\.)\\s*(?:\\r?\\n|$)/)
+    if (!m) return md
+    const body = m[1]
+    const firstNonBlank = body.split(/\\r?\\n/).find((l) => l.trim() !== "")
+    if (firstNonBlank !== undefined && !/^[A-Za-z_][\\w-]*\\s*:/.test(firstNonBlank)) return md
+    return md.slice(m[0].length)
   }
 
   // Walk lines, splitting on fenced code blocks. Fence opener: 3+ "\`" or
