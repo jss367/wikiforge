@@ -64,8 +64,16 @@ document.addEventListener("nav", () => {
     const linkEls = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
     const linkContents = await Promise.all(
       linkEls.map((l) => {
+        // Compare URL.origin rather than \`href.startsWith(location.origin)\`.
+        // The prefix form treats \`https://example.com.evil.net/...\` as
+        // same-origin against \`https://example.com\`, which is wrong; here the
+        // CORS layer would catch it anyway, but the principle is consistent
+        // with the ZIP exporter below.
         const href = l.href
-        if (!href || !href.startsWith(location.origin)) return Promise.resolve("")
+        if (!href) return Promise.resolve("")
+        let same = false
+        try { same = new URL(href).origin === location.origin } catch (e) {}
+        if (!same) return Promise.resolve("")
         return fetch(href).then((r) => (r.ok ? r.text() : "")).catch(() => "")
       }),
     )
@@ -512,6 +520,11 @@ document.addEventListener("nav", () => {
           sections.push(cur)
           continue
         }
+        // H1 closes any open section; the H1 line and any prose following it
+        // (until the next h2/h3) lands in \`intro\`. Without this reset, a
+        // page with a mid-document H1 would silently glue the H1 onto the
+        // previous section's body.
+        if (level === 1) cur = intro
       }
       cur.lines.push(line)
     }
@@ -622,9 +635,15 @@ document.addEventListener("nav", () => {
     clone.querySelectorAll("img[src]").forEach((img) => {
       const v = img.getAttribute("src")
       if (!v) return
-      let abs
-      try { abs = new URL(v, location.href).href } catch (e) { return }
-      if (!abs.startsWith(location.origin)) {
+      let url
+      try { url = new URL(v, location.href) } catch (e) { return }
+      const abs = url.href
+      // Compare \`URL.origin\`, not \`href.startsWith(location.origin)\`. The
+      // prefix form misclassifies \`https://example.com.evil.net/foo.png\`
+      // as same-origin against \`https://example.com\`, which would rewrite
+      // a non-fetchable URL to a local path that's never written to the ZIP
+      // — yielding a broken image reference in the bundle.
+      if (url.origin !== location.origin) {
         // Cross-origin: leave the absolute URL so the bundled HTML still
         // resolves it from the network when the user views the file.
         img.setAttribute("src", abs)
