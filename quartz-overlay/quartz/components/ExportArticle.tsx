@@ -492,6 +492,14 @@ document.addEventListener("nav", () => {
   // but doesn't open a new one — callers want the H1 to stay with the
   // intro). Code-fence tracking mirrors filterMarkdownByHeadings so a
   // "## foo" inside a fence isn't misread as a section split.
+  //
+  // ATX-only: setext headings ("Title\\n===" / "Title\\n---") are not
+  // recognised as section breaks. This matches the rest of this file —
+  // the picker, filterMarkdownByHeadings, and countMdHeadings are all
+  // ATX-only — so a setext-authored page degrades the same way across
+  // all export paths (everything lands in \`intro\`, no sections). Adding
+  // setext support requires a coordinated change across all four sites
+  // plus disambiguation against thematic breaks; out of scope here.
   function mdToSections(md) {
     const lines = md.split(/\\r?\\n/)
     let inFence = false, fenceChar = "", fenceLen = 0
@@ -609,7 +617,6 @@ document.addEventListener("nav", () => {
     // continue to work when the user views the bundled HTML online.
     clone.querySelectorAll("[href]").forEach((el) => absolutizeAttr(el, "href"))
 
-    const fileMap = new Map()  // absolute URL -> local path inside zip
     const usedNames = new Set()
     function pickLocalName(url) {
       let pathname = ""
@@ -631,7 +638,14 @@ document.addEventListener("nav", () => {
       return "images/" + name
     }
 
-    const fetchPromises = []
+    // Two-pass: collect (img, abs) pairs and the deduped URL set, fetch in
+    // parallel, then rewrite \`src\` only for URLs whose fetch actually
+    // succeeded. Eager rewriting (the previous shape) left a dead path in
+    // \`index.html\` whenever a same-origin fetch returned non-OK — the local
+    // file was filtered out before entry creation, so the bundle pointed at
+    // a name it never wrote.
+    const tasks = []
+    const uniqUrls = new Set()
     clone.querySelectorAll("img[src]").forEach((img) => {
       const v = img.getAttribute("src")
       if (!v) return
@@ -640,33 +654,49 @@ document.addEventListener("nav", () => {
       const abs = url.href
       // Compare \`URL.origin\`, not \`href.startsWith(location.origin)\`. The
       // prefix form misclassifies \`https://example.com.evil.net/foo.png\`
-      // as same-origin against \`https://example.com\`, which would rewrite
-      // a non-fetchable URL to a local path that's never written to the ZIP
-      // — yielding a broken image reference in the bundle.
+      // as same-origin against \`https://example.com\`.
       if (url.origin !== location.origin) {
         // Cross-origin: leave the absolute URL so the bundled HTML still
         // resolves it from the network when the user views the file.
         img.setAttribute("src", abs)
         return
       }
-      if (!fileMap.has(abs)) {
-        const local = pickLocalName(abs)
-        fileMap.set(abs, local)
-        fetchPromises.push(
-          fetch(abs)
-            .then((r) => (r.ok ? r.arrayBuffer() : null))
-            .then((buf) => (buf ? { local, data: new Uint8Array(buf) } : null))
-            .catch(() => null),
-        )
-      }
-      img.setAttribute("src", fileMap.get(abs))
+      tasks.push({ img, abs })
+      uniqUrls.add(abs)
     })
     // Same handling for srcset would multiply fetches with marginal value
     // for a static-archive use case; stripping srcset keeps the bundle
     // simple and predictable.
     clone.querySelectorAll("img[srcset]").forEach((img) => img.removeAttribute("srcset"))
 
-    const fetched = (await Promise.all(fetchPromises)).filter(Boolean)
+    const urls = Array.from(uniqUrls)
+    const buffers = await Promise.all(
+      urls.map((u) =>
+        fetch(u)
+          .then((r) => (r.ok ? r.arrayBuffer() : null))
+          .catch(() => null),
+      ),
+    )
+    // Reserve local names only for URLs we actually fetched, so a failed
+    // fetch doesn't burn a name slot or leave the bundle inconsistent.
+    const localByUrl = new Map()
+    const fetched = []
+    urls.forEach((u, i) => {
+      const buf = buffers[i]
+      if (!buf) return
+      const local = pickLocalName(u)
+      localByUrl.set(u, local)
+      fetched.push({ local, data: new Uint8Array(buf) })
+    })
+    for (const t of tasks) {
+      const local = localByUrl.get(t.abs)
+      // Successful fetch → point at the bundled file. Failure → keep the
+      // absolute URL so the image still loads online when the bundle is
+      // viewed against the live site, and degrades cleanly to a "broken
+      // image" icon offline rather than a 404 inside the archive.
+      t.img.setAttribute("src", local || t.abs)
+    }
+
     const html = buildStandaloneHtml(clone, css, titleText)
     const enc = new TextEncoder()
     const entries = [{ name: "index.html", data: enc.encode(html) }]
