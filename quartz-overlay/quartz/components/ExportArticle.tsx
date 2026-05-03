@@ -201,7 +201,11 @@ document.addEventListener("nav", () => {
   // typed" than a half-stripped LaTeX expression would be.
   function mdToText(md, titleText) {
     let body = md
-    if (!/^#\\s/.test(body)) body = "# " + titleText + "\\n\\n" + body
+    // Detect both ATX (\`# Title\`) and setext (\`Title\\n===\`) H1 forms so a
+    // setext-authored document doesn't get a synthetic title prepended on
+    // top of the one already in the file.
+    const hasH1 = /^#\\s/.test(body) || /^[^\\n]+\\r?\\n=+[ \\t]*(?:\\r?\\n|$)/.test(body)
+    if (!hasH1) body = "# " + titleText + "\\n\\n" + body
     const segments = tokenize(body)
     const parts = []
     for (const s of segments) {
@@ -421,7 +425,11 @@ document.addEventListener("nav", () => {
 
   function mdToLatex(rawMd, titleText) {
     let md = rawMd.replace(/^(?:[ \\t]*\\r?\\n)+/, "")
-    if (!/^#\\s/.test(md)) md = "# " + titleText + "\\n\\n" + md
+    // Detect both ATX and setext H1 so a setext-authored document doesn't
+    // get \`\\maketitle\` PLUS a synthetic ATX H1 stacked on top of its
+    // existing setext title.
+    const hasH1 = /^#\\s/.test(md) || /^[^\\n]+\\r?\\n=+[ \\t]*(?:\\r?\\n|$)/.test(md)
+    if (!hasH1) md = "# " + titleText + "\\n\\n" + md
     const segments = tokenize(md)
     const bodyParts = []
     for (const s of segments) {
