@@ -223,8 +223,11 @@ document.addEventListener("nav", () => {
       txt = txt.replace(/\\[\\[([^\\]|]+)\\|([^\\]]+)\\]\\]/g, "$2")
       txt = txt.replace(/\\[\\[([^\\]]+)\\]\\]/g, "$1")
       // Bold/italic/strike (bold first so its inner * isn't read as italic).
+      // Underscore italic uses CommonMark's intraword rule so identifiers
+      // like \`foo_bar_baz\` aren't collapsed to \`foobarbaz\`.
       txt = txt.replace(/(\\*\\*|__)(.+?)\\1/g, "$2")
-      txt = txt.replace(/(?:\\*|_)([^*_\\n]+)(?:\\*|_)/g, "$1")
+      txt = txt.replace(/\\*([^*\\n]+)\\*/g, "$1")
+      txt = txt.replace(/(^|[^A-Za-z0-9_])_([^_\\n]+)_(?![A-Za-z0-9_])/g, "$1$2")
       txt = txt.replace(/~~([^~\\n]+)~~/g, "$1")
       // Inline code.
       txt = txt.replace(/\`([^\`]+)\`/g, "$1")
@@ -259,16 +262,16 @@ document.addEventListener("nav", () => {
     )
   }
 
-  // Escape a plain-text run for LaTeX. Order matters: backslash first
-  // (otherwise the replacements below would double-escape their own \\\\),
-  // then the simple character substitutions, then ~ and ^ which need
-  // command form because LaTeX treats the bare characters specially.
+  // Escape a plain-text run for LaTeX. Single pass so the braces emitted
+  // by \`\\textbackslash{}\` aren't re-escaped into \`\\textbackslash\\{\\}\`,
+  // and so we don't have to reason about the order of N sequential passes.
   function escapeLatex(s) {
-    return s
-      .replace(/\\\\/g, "\\\\textbackslash{}")
-      .replace(/([&%$#_{}])/g, "\\\\$1")
-      .replace(/~/g, "\\\\textasciitilde{}")
-      .replace(/\\^/g, "\\\\textasciicircum{}")
+    return s.replace(/[\\\\{}&%$#_~^]/g, (c) => {
+      if (c === "\\\\") return "\\\\textbackslash{}"
+      if (c === "~") return "\\\\textasciitilde{}"
+      if (c === "^") return "\\\\textasciicircum{}"
+      return "\\\\" + c
+    })
   }
 
   // Inline transformer: markdown spans inside a single line of prose.
@@ -321,10 +324,11 @@ document.addEventListener("nav", () => {
       t = t.replace(/\\*\\*([^*]+)\\*\\*/g, (_, x) => stash("\\\\textbf{" + escapeLatex(x) + "}"))
       t = t.replace(/__([^_]+)__/g, (_, x) => stash("\\\\textbf{" + escapeLatex(x) + "}"))
       t = t.replace(/\\*([^*\\n]+)\\*/g, (_, x) => stash("\\\\emph{" + escapeLatex(x) + "}"))
-      t = t.replace(/(?:^|[^A-Za-z0-9])_([^_\\n]+)_/g, (m, x) => {
-        // Underscore italic: only when not surrounded by word chars (so
-        // identifiers like \`my_var\` aren't italicised). Preserve the
-        // leading boundary char.
+      t = t.replace(/(?:^|[^A-Za-z0-9_])_([^_\\n]+)_(?![A-Za-z0-9_])/g, (m, x) => {
+        // Underscore italic: CommonMark intraword rule — both ends must
+        // sit at a non-word-char boundary so identifiers like \`my_var\` or
+        // \`foo_bar_baz\` aren't italicised. Preserve the leading boundary
+        // char (the trailing lookahead doesn't consume).
         const lead = m.slice(0, m.length - x.length - 2)
         return lead + stash("\\\\emph{" + escapeLatex(x) + "}")
       })
@@ -623,8 +627,12 @@ document.addEventListener("nav", () => {
       try { pathname = new URL(url).pathname } catch (e) { return "images/asset.bin" }
       let base = pathname.split("/").pop() || "asset"
       // Browsers tolerate spaces / unicode in zip filenames but some zip
-      // tools don't. Normalize to a conservative subset.
-      base = decodeURIComponent(base).replace(/[^A-Za-z0-9._-]+/g, "_")
+      // tools don't. Normalize to a conservative subset. \`decodeURIComponent\`
+      // throws URIError on malformed % escapes (e.g. literal \`%\` in a
+      // filename); fall back to the undecoded base rather than aborting
+      // the entire ZIP.
+      try { base = decodeURIComponent(base) } catch (e) {}
+      base = base.replace(/[^A-Za-z0-9._-]+/g, "_")
       if (!base || base === "_") base = "asset"
       if (!base.includes(".")) base += ".bin"
       let name = base
