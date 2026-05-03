@@ -30,16 +30,33 @@ document.addEventListener("nav", () => {
   document.addEventListener("click", onDocClick)
   document.addEventListener("keydown", onKey)
 
-  // ----- HTML export (standalone single-file copy of the rendered page) -----
-  async function exportHtml(checked) {
-    const center = document.querySelector(".center")
-    if (!center) return
+  // ----- shared HTML-builder helpers ---------------------------------------
+  // Hoisted out of exportHtml so the PDF and ZIP exporters can build the
+  // same standalone document without duplicating CSS collection or escape
+  // logic.
 
-    // Collect inline <style> blocks plus the contents of every same-origin
-    // stylesheet. Cross-origin sheets (e.g. Google Fonts) are skipped: the
-    // browser blocks fetch() for those and we'd hang. Skipping them just
-    // means the export falls back to system fonts, which is acceptable for
-    // a portable single-file copy.
+  function escapeHtmlText(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  }
+
+  // Relative URLs (e.g. "../images/foo.png", "/topics/bar") resolve
+  // against the *file path* of the exported HTML once it's opened from
+  // disk, which would 404. Absolutize against the current page so assets
+  // and internal links still point back at the live site.
+  function absolutizeAttr(el, attr) {
+    const v = el.getAttribute(attr)
+    if (!v || v.startsWith("#") || /^[a-z][a-z0-9+.-]*:/i.test(v)) return
+    try {
+      el.setAttribute(attr, new URL(v, location.href).href)
+    } catch (e) {}
+  }
+
+  // Collect inline <style> blocks plus the contents of every same-origin
+  // stylesheet. Cross-origin sheets (e.g. Google Fonts) are skipped: the
+  // browser blocks fetch() for those and we'd hang. Skipping them just
+  // means the export falls back to system fonts, which is acceptable for
+  // a portable single-file copy.
+  async function collectCss() {
     const styleParts = []
     document.querySelectorAll("style").forEach((s) => {
       if (s.textContent) styleParts.push(s.textContent)
@@ -47,52 +64,53 @@ document.addEventListener("nav", () => {
     const linkEls = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
     const linkContents = await Promise.all(
       linkEls.map((l) => {
+        // Compare URL.origin rather than \`href.startsWith(location.origin)\`.
+        // The prefix form treats \`https://example.com.evil.net/...\` as
+        // same-origin against \`https://example.com\`, which is wrong; here the
+        // CORS layer would catch it anyway, but the principle is consistent
+        // with the ZIP exporter below.
         const href = l.href
-        if (!href || !href.startsWith(location.origin)) return Promise.resolve("")
+        if (!href) return Promise.resolve("")
+        let same = false
+        try { same = new URL(href).origin === location.origin } catch (e) {}
+        if (!same) return Promise.resolve("")
         return fetch(href).then((r) => (r.ok ? r.text() : "")).catch(() => "")
       }),
     )
-    const css = styleParts.concat(linkContents).join("\\n\\n")
+    return styleParts.concat(linkContents).join("\\n\\n")
+  }
 
-    const titleEl = center.querySelector("h1, .article-title")
-    const titleText = (titleEl && titleEl.textContent) || document.title || "page"
-    const escapeHtml = (s) =>
-      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-
-    // Clone so we can rewrite attributes without mutating the live DOM.
-    // Relative URLs (e.g. "../images/foo.png", "/topics/bar") resolve
-    // against the *file path* of the exported HTML once it's opened from
-    // disk, which would 404. Absolutize against the current page so assets
-    // and internal links still point back at the live site.
-    const clone = center.cloneNode(true)
-    const absolutize = (el, attr) => {
-      const v = el.getAttribute(attr)
-      if (!v || v.startsWith("#") || /^[a-z][a-z0-9+.-]*:/i.test(v)) return
-      try {
-        el.setAttribute(attr, new URL(v, location.href).href)
-      } catch (e) {}
-    }
-    clone.querySelectorAll("[src]").forEach((el) => absolutize(el, "src"))
-    clone.querySelectorAll("[href]").forEach((el) => absolutize(el, "href"))
-
-    // Apply user's section selection (if the picker was visible).
-    filterClonedArticle(clone, checked)
-
-    // Wrap the article in the same nesting Quartz uses so the page's CSS
-    // selectors (.page, .center, .popover-hint, #quartz-body) still match.
-    const html =
-      '<!DOCTYPE html>\\n<html lang="en"><head><meta charset="utf-8">' +
+  // Wrap the article in the same nesting Quartz uses so the page's CSS
+  // selectors (.page, .center, .popover-hint, #quartz-body) still match.
+  // \`extraStyle\` lets callers append print-specific or bundle-specific
+  // rules (e.g. PDF export hides the print dialog noise via @page).
+  function buildStandaloneHtml(clone, css, titleText, extraStyle) {
+    return '<!DOCTYPE html>\\n<html lang="en"><head><meta charset="utf-8">' +
       '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<title>' + escapeHtml(titleText) + '</title>' +
+      '<title>' + escapeHtmlText(titleText) + '</title>' +
       '<style>' + css + '\\n' +
       '.sidebar,.header,.breadcrumb-container,.export-article,.edit-in-obsidian{display:none!important}' +
       'body{margin:0;padding:2rem 1rem}' +
       '.page,.center{max-width:750px;margin:0 auto}' +
+      (extraStyle || "") +
       '</style></head><body><div id="quartz-root"><div id="quartz-body">' +
       '<div class="page">' +
       clone.outerHTML +
       '</div></div></div></body></html>'
+  }
 
+  // ----- HTML export (standalone single-file copy of the rendered page) -----
+  async function exportHtml(checked) {
+    const center = document.querySelector(".center")
+    if (!center) return
+    const css = await collectCss()
+    const titleEl = center.querySelector("h1, .article-title")
+    const titleText = (titleEl && titleEl.textContent) || document.title || "page"
+    const clone = center.cloneNode(true)
+    clone.querySelectorAll("[src]").forEach((el) => absolutizeAttr(el, "src"))
+    clone.querySelectorAll("[href]").forEach((el) => absolutizeAttr(el, "href"))
+    filterClonedArticle(clone, checked)
+    const html = buildStandaloneHtml(clone, css, titleText)
     triggerDownload(new Blob([html], { type: "text/html;charset=utf-8" }), titleText, "html")
   }
 
@@ -118,6 +136,677 @@ document.addEventListener("nav", () => {
     const notebook = mdToNotebook(md, titleText)
     const json = JSON.stringify(notebook, null, 1)
     triggerDownload(new Blob([json], { type: "application/x-ipynb+json" }), titleText, "ipynb")
+  }
+
+  // ----- shared "fetch the .md source" wrapper ------------------------------
+  // Several exporters (Markdown, Plain text, LaTeX, JSON, Jupyter) start the
+  // same way: pull the raw markdown for this slug, alert on miss. Centralised
+  // so the alert wording stays consistent and a future move (e.g. cached
+  // source, pre-fetched bundle) is one edit instead of five.
+  async function fetchSourceMd() {
+    const slug = root.getAttribute("data-slug")
+    if (!slug) return null
+    const res = await fetch("/" + slug + ".md")
+    if (!res.ok) {
+      alert("Could not load markdown source for this page (" + res.status + ").")
+      return null
+    }
+    return await res.text()
+  }
+
+  function getTitleText() {
+    const titleEl = document.querySelector(".center h1, .center .article-title")
+    return (titleEl && titleEl.textContent) || document.title || "page"
+  }
+
+  // ----- Markdown export (raw .md, frontmatter stripped) -------------------
+  // The source file is already markdown; this exporter just hands it back to
+  // the user with frontmatter stripped (otherwise the YAML block re-renders
+  // as a "---" thematic break + table on systems without frontmatter
+  // support) and the section picker applied.
+  async function exportMarkdown(checked) {
+    const rawMd = await fetchSourceMd()
+    if (rawMd == null) return
+    const md = filterMarkdownByHeadings(stripFrontmatter(rawMd), checked)
+    triggerDownload(
+      new Blob([md], { type: "text/markdown;charset=utf-8" }),
+      getTitleText(),
+      "md",
+    )
+  }
+
+  // ----- Plain text export --------------------------------------------------
+  // Operates on the markdown source rather than the rendered DOM: the source
+  // is closer to "what the author wrote," code fences survive verbatim, and
+  // the output is line-stable across rebuilds. The DOM path would inherit
+  // theme-specific decorations (line numbers, copy buttons, callout glyphs)
+  // that read as garbage in a plain-text file.
+  async function exportText(checked) {
+    const rawMd = await fetchSourceMd()
+    if (rawMd == null) return
+    const md = filterMarkdownByHeadings(stripFrontmatter(rawMd), checked)
+    const text = mdToText(md, getTitleText())
+    triggerDownload(
+      new Blob([text], { type: "text/plain;charset=utf-8" }),
+      getTitleText(),
+      "txt",
+    )
+  }
+
+  // Strip markdown syntax from prose; pass code blocks through unchanged.
+  // Patterns are applied in an order that minimises cross-interference
+  // (images before links, fenced code never reached because tokenize keeps
+  // it segregated). Inline math \`$x$\` / \`$$x$$\` is NOT special-cased — it
+  // stays as \`$x$\` in the output, which is closer to "what the author
+  // typed" than a half-stripped LaTeX expression would be.
+  function mdToText(md, titleText) {
+    let body = md
+    // Detect both ATX (\`# Title\`) and setext (\`Title\\n===\`) H1 forms so a
+    // setext-authored document doesn't get a synthetic title prepended on
+    // top of the one already in the file.
+    const hasH1 = /^#\\s/.test(body) || /^[^\\n]+\\r?\\n=+[ \\t]*(?:\\r?\\n|$)/.test(body)
+    if (!hasH1) body = "# " + titleText + "\\n\\n" + body
+    const segments = tokenize(body)
+    const parts = []
+    for (const s of segments) {
+      if (s.type === "code") {
+        parts.push(s.lines.join("\\n"))
+        continue
+      }
+      let txt = s.lines.join("\\n")
+      // ATX headings: drop leading #s and any trailing # run.
+      txt = txt.replace(/^\\s{0,3}#{1,6}\\s+(.+?)\\s*#*\\s*$/gm, "$1")
+      // Setext headings: collapse "Title\\n===" / "Title\\n---" to just Title.
+      txt = txt.replace(/^(.+)\\n=+\\s*$/gm, "$1")
+      txt = txt.replace(/^(.+)\\n-+\\s*$/gm, "$1")
+      // Images first so their alt text survives the link pass below.
+      txt = txt.replace(/!\\[([^\\]]*)\\]\\([^)]*\\)/g, "$1")
+      // Markdown links: keep visible text, drop URL.
+      txt = txt.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, "$1")
+      // Wikilinks: \`[[target|alias]]\` → alias, \`[[target]]\` → target.
+      txt = txt.replace(/\\[\\[([^\\]|]+)\\|([^\\]]+)\\]\\]/g, "$2")
+      txt = txt.replace(/\\[\\[([^\\]]+)\\]\\]/g, "$1")
+      // Bold/italic/strike (bold first so its inner * isn't read as italic).
+      // Underscore italic uses CommonMark's intraword rule so identifiers
+      // like \`foo_bar_baz\` aren't collapsed to \`foobarbaz\`.
+      txt = txt.replace(/(\\*\\*|__)(.+?)\\1/g, "$2")
+      txt = txt.replace(/\\*([^*\\n]+)\\*/g, "$1")
+      txt = txt.replace(/(^|[^A-Za-z0-9_])_([^_\\n]+)_(?![A-Za-z0-9_])/g, "$1$2")
+      txt = txt.replace(/~~([^~\\n]+)~~/g, "$1")
+      // Inline code.
+      txt = txt.replace(/\`([^\`]+)\`/g, "$1")
+      // List markers (unordered + ordered).
+      txt = txt.replace(/^\\s*[-*+]\\s+/gm, "")
+      txt = txt.replace(/^\\s*\\d+[.)]\\s+/gm, "")
+      // Blockquote markers.
+      txt = txt.replace(/^\\s*>\\s?/gm, "")
+      // Horizontal rules.
+      txt = txt.replace(/^\\s*[-*_]{3,}\\s*$/gm, "")
+      parts.push(txt)
+    }
+    return parts.join("\\n").replace(/\\n{3,}/g, "\\n\\n").trim() + "\\n"
+  }
+
+  // ----- LaTeX export -------------------------------------------------------
+  // Best-effort markdown -> LaTeX. Handles the common shapes (headings,
+  // paragraphs, bullet/numbered lists, fenced code via listings, links,
+  // emphasis, inline + display math passthrough, images via graphicx). Does
+  // NOT handle: GFM tables, footnotes, definition lists, callouts. The
+  // output is a self-contained .tex skeleton that compiles with stock
+  // pdflatex on any document that sticks to those common shapes.
+  async function exportLatex(checked) {
+    const rawMd = await fetchSourceMd()
+    if (rawMd == null) return
+    const md = filterMarkdownByHeadings(stripFrontmatter(rawMd), checked)
+    const tex = mdToLatex(md, getTitleText())
+    triggerDownload(
+      new Blob([tex], { type: "application/x-tex;charset=utf-8" }),
+      getTitleText(),
+      "tex",
+    )
+  }
+
+  // Escape a plain-text run for LaTeX. Single pass so the braces emitted
+  // by \`\\textbackslash{}\` aren't re-escaped into \`\\textbackslash\\{\\}\`,
+  // and so we don't have to reason about the order of N sequential passes.
+  function escapeLatex(s) {
+    return s.replace(/[\\\\{}&%$#_~^]/g, (c) => {
+      if (c === "\\\\") return "\\\\textbackslash{}"
+      if (c === "~") return "\\\\textasciitilde{}"
+      if (c === "^") return "\\\\textasciicircum{}"
+      return "\\\\" + c
+    })
+  }
+
+  // Inline transformer: markdown spans inside a single line of prose.
+  // We tokenize into "math" runs (passed through verbatim — LaTeX already
+  // understands \`$...$\` / \`$$...$$\`) and "text" runs (markdown patterns
+  // converted to LaTeX commands). Patterns are converted into placeholders
+  // first, the surrounding text is escaped, and the placeholders are
+  // expanded last so escapeLatex doesn't mangle the LaTeX commands.
+  // Sentinel char \\u0000 is used because it can't appear in a markdown
+  // file (the build pipeline strips NULs) so we don't need to worry about
+  // it colliding with real content.
+  function inlineToLatex(s) {
+    const NUL = "\\u0000"
+    const out = []
+    let i = 0
+    while (i < s.length) {
+      if (s[i] === "$") {
+        // Display math first.
+        if (s[i + 1] === "$") {
+          const end = s.indexOf("$$", i + 2)
+          if (end !== -1) { out.push({ raw: true, v: s.slice(i, end + 2) }); i = end + 2; continue }
+        }
+        const end = s.indexOf("$", i + 1)
+        if (end !== -1) { out.push({ raw: true, v: s.slice(i, end + 1) }); i = end + 1; continue }
+        out.push({ raw: false, v: "$" }); i++; continue
+      }
+      let j = s.indexOf("$", i)
+      if (j === -1) j = s.length
+      out.push({ raw: false, v: s.slice(i, j) })
+      i = j
+    }
+    return out.map((p) => {
+      if (p.raw) return p.v
+      let t = p.v
+      const slots = []
+      const stash = (val) => { slots.push(val); return NUL + (slots.length - 1) + NUL }
+      // Inline code first so its content isn't mangled by emphasis below.
+      t = t.replace(/\`([^\`]+)\`/g, (_, x) => stash("\\\\texttt{" + escapeLatex(x) + "}"))
+      // Images before links (![alt](url) starts with "!" so a naked link
+      // pattern would otherwise consume the leading "[alt](url)").
+      t = t.replace(/!\\[([^\\]]*)\\]\\(([^)]+)\\)/g, (_, alt, url) =>
+        stash("\\\\includegraphics[width=\\\\linewidth]{" + url + "}"))
+      t = t.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, (_, text, url) =>
+        stash("\\\\href{" + url + "}{" + escapeLatex(text) + "}"))
+      // Wikilinks: render alias text only — the target is a vault path
+      // that means nothing outside the wiki.
+      t = t.replace(/\\[\\[([^\\]|]+)\\|([^\\]]+)\\]\\]/g, (_, _t, alias) => stash(escapeLatex(alias)))
+      t = t.replace(/\\[\\[([^\\]]+)\\]\\]/g, (_, target) => stash(escapeLatex(target)))
+      // Bold before italic so **x** isn't misread as italic-then-italic.
+      t = t.replace(/\\*\\*([^*]+)\\*\\*/g, (_, x) => stash("\\\\textbf{" + escapeLatex(x) + "}"))
+      t = t.replace(/__([^_]+)__/g, (_, x) => stash("\\\\textbf{" + escapeLatex(x) + "}"))
+      t = t.replace(/\\*([^*\\n]+)\\*/g, (_, x) => stash("\\\\emph{" + escapeLatex(x) + "}"))
+      t = t.replace(/(?:^|[^A-Za-z0-9_])_([^_\\n]+)_(?![A-Za-z0-9_])/g, (m, x) => {
+        // Underscore italic: CommonMark intraword rule — both ends must
+        // sit at a non-word-char boundary so identifiers like \`my_var\` or
+        // \`foo_bar_baz\` aren't italicised. Preserve the leading boundary
+        // char (the trailing lookahead doesn't consume).
+        const lead = m.slice(0, m.length - x.length - 2)
+        return lead + stash("\\\\emph{" + escapeLatex(x) + "}")
+      })
+      t = t.replace(/~~([^~\\n]+)~~/g, (_, x) => stash("\\\\sout{" + escapeLatex(x) + "}"))
+      // Now escape the rest of the text and re-expand stashed LaTeX.
+      t = escapeLatex(t)
+      t = t.replace(new RegExp(NUL + "(\\\\d+)" + NUL, "g"), (_, idx) => slots[parseInt(idx)])
+      return t
+    }).join("")
+  }
+
+  // Walk lines of prose and emit LaTeX block constructs. Open/close list
+  // and quote environments as we cross their boundaries so nested or
+  // adjacent constructs render correctly. Setext headings are folded into
+  // their ATX equivalents up front because the rest of the walker only
+  // recognises ATX form.
+  function proseToLatex(text) {
+    let txt = text
+      .replace(/^(.+)\\n=+\\s*$/gm, "# $1")
+      .replace(/^(.+)\\n-+\\s*$/gm, "## $1")
+    const lines = txt.split(/\\r?\\n/)
+    const out = []
+    let listKind = null  // "ul" | "ol" | null
+    let inQuote = false
+    const closeList = () => {
+      if (listKind === "ul") out.push("\\\\end{itemize}")
+      if (listKind === "ol") out.push("\\\\end{enumerate}")
+      listKind = null
+    }
+    const closeQuote = () => {
+      if (inQuote) out.push("\\\\end{quote}")
+      inQuote = false
+    }
+    const headingCmd = (level) => {
+      // beyond \\subsubsection LaTeX has \\paragraph and \\subparagraph;
+      // they render inline rather than as standalone titles, which is
+      // closer to what an h5/h6 in a markdown doc usually means.
+      if (level === 1) return "\\\\section*"
+      if (level === 2) return "\\\\subsection*"
+      if (level === 3) return "\\\\subsubsection*"
+      if (level === 4) return "\\\\paragraph*"
+      return "\\\\subparagraph*"
+    }
+    for (const line of lines) {
+      const hM = line.match(/^\\s{0,3}(#{1,6})\\s+(.+?)\\s*#*\\s*$/)
+      if (hM) {
+        closeList(); closeQuote()
+        out.push(headingCmd(hM[1].length) + "{" + inlineToLatex(hM[2]) + "}")
+        continue
+      }
+      const ulM = line.match(/^\\s*[-*+]\\s+(.*)$/)
+      if (ulM) {
+        closeQuote()
+        if (listKind !== "ul") { closeList(); out.push("\\\\begin{itemize}"); listKind = "ul" }
+        out.push("  \\\\item " + inlineToLatex(ulM[1]))
+        continue
+      }
+      const olM = line.match(/^\\s*\\d+[.)]\\s+(.*)$/)
+      if (olM) {
+        closeQuote()
+        if (listKind !== "ol") { closeList(); out.push("\\\\begin{enumerate}"); listKind = "ol" }
+        out.push("  \\\\item " + inlineToLatex(olM[1]))
+        continue
+      }
+      const qM = line.match(/^\\s*>\\s?(.*)$/)
+      if (qM) {
+        closeList()
+        if (!inQuote) { out.push("\\\\begin{quote}"); inQuote = true }
+        out.push(inlineToLatex(qM[1]))
+        continue
+      }
+      const hrM = line.match(/^\\s*[-*_]{3,}\\s*$/)
+      if (hrM) {
+        closeList(); closeQuote()
+        out.push("\\\\hrule")
+        continue
+      }
+      if (line.trim() === "") {
+        closeList(); closeQuote()
+        out.push("")
+        continue
+      }
+      // Plain prose line.
+      closeList(); closeQuote()
+      out.push(inlineToLatex(line))
+    }
+    closeList(); closeQuote()
+    return out.join("\\n")
+  }
+
+  function mdToLatex(rawMd, titleText) {
+    let md = rawMd.replace(/^(?:[ \\t]*\\r?\\n)+/, "")
+    // Detect both ATX and setext H1 so a setext-authored document doesn't
+    // get \`\\maketitle\` PLUS a synthetic ATX H1 stacked on top of its
+    // existing setext title.
+    const hasH1 = /^#\\s/.test(md) || /^[^\\n]+\\r?\\n=+[ \\t]*(?:\\r?\\n|$)/.test(md)
+    if (!hasH1) md = "# " + titleText + "\\n\\n" + md
+    const segments = tokenize(md)
+    const bodyParts = []
+    for (const s of segments) {
+      if (s.type === "code") {
+        // listings package renders code blocks with optional language
+        // highlighting. Unknown languages just render as monospaced
+        // blocks; that's strictly better than dropping the fence.
+        const lang = (s.lang || "").replace(/[^A-Za-z0-9+#-]/g, "")
+        bodyParts.push(
+          "\\\\begin{lstlisting}" + (lang ? "[language=" + lang + "]" : "") + "\\n" +
+          s.lines.join("\\n") + "\\n\\\\end{lstlisting}"
+        )
+      } else {
+        bodyParts.push(proseToLatex(s.lines.join("\\n")))
+      }
+    }
+    // Document preamble. \`graphicx\` for images, \`hyperref\` for links,
+    // \`listings\` for code, \`ulem\` for strikethrough, \`amsmath/amssymb\`
+    // for math. \`xurl\` lets long URLs in href targets break across lines
+    // instead of overflowing the page width.
+    return [
+      "\\\\documentclass[11pt]{article}",
+      "\\\\usepackage[utf8]{inputenc}",
+      "\\\\usepackage[T1]{fontenc}",
+      "\\\\usepackage{amsmath, amssymb}",
+      "\\\\usepackage{graphicx}",
+      "\\\\usepackage{listings}",
+      "\\\\usepackage[normalem]{ulem}",
+      "\\\\usepackage{hyperref}",
+      "\\\\usepackage{xurl}",
+      "\\\\setlength{\\\\parskip}{0.5em}",
+      "\\\\setlength{\\\\parindent}{0pt}",
+      "\\\\title{" + escapeLatex(titleText) + "}",
+      "\\\\date{}",
+      "\\\\begin{document}",
+      "\\\\maketitle",
+      "",
+      bodyParts.join("\\n\\n"),
+      "",
+      "\\\\end{document}",
+      "",
+    ].join("\\n")
+  }
+
+  // ----- JSON export --------------------------------------------------------
+  // Structured representation: title, slug, intro (text before the first
+  // h2/h3), and an array of sections each carrying its heading, level, and
+  // body markdown. Useful for piping into other tools (LLMs, search
+  // indexers, custom renderers) without re-parsing markdown each time.
+  async function exportJson(checked) {
+    const slug = root.getAttribute("data-slug")
+    if (!slug) return
+    const rawMd = await fetchSourceMd()
+    if (rawMd == null) return
+    const md = filterMarkdownByHeadings(stripFrontmatter(rawMd), checked)
+    const split = mdToSections(md)
+    const payload = {
+      title: getTitleText(),
+      slug,
+      exported_at: new Date().toISOString(),
+      intro: split.intro,
+      sections: split.sections,
+    }
+    triggerDownload(
+      new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }),
+      getTitleText(),
+      "json",
+    )
+  }
+
+  // Walk lines, splitting on h2/h3 boundaries (h1 closes any open section
+  // but doesn't open a new one — callers want the H1 to stay with the
+  // intro). Code-fence tracking mirrors filterMarkdownByHeadings so a
+  // "## foo" inside a fence isn't misread as a section split.
+  //
+  // ATX-only: setext headings ("Title\\n===" / "Title\\n---") are not
+  // recognised as section breaks. This matches the rest of this file —
+  // the picker, filterMarkdownByHeadings, and countMdHeadings are all
+  // ATX-only — so a setext-authored page degrades the same way across
+  // all export paths (everything lands in \`intro\`, no sections). Adding
+  // setext support requires a coordinated change across all four sites
+  // plus disambiguation against thematic breaks; out of scope here.
+  function mdToSections(md) {
+    const lines = md.split(/\\r?\\n/)
+    let inFence = false, fenceChar = "", fenceLen = 0
+    const intro = { lines: [] }
+    const sections = []
+    let cur = intro
+    for (const line of lines) {
+      if (inFence) {
+        cur.lines.push(line)
+        if (isFenceCloser(line, fenceChar, fenceLen)) inFence = false
+        continue
+      }
+      const fenceM = line.match(/^(\\s{0,3})([\\\`~]{3,})/)
+      if (fenceM) {
+        inFence = true
+        fenceChar = fenceM[2][0]
+        fenceLen = fenceM[2].length
+        cur.lines.push(line)
+        continue
+      }
+      const hM = line.match(/^\\s{0,3}(#{1,6})\\s+(.+?)\\s*#*\\s*$/)
+      if (hM) {
+        const level = hM[1].length
+        if (level === 2 || level === 3) {
+          cur = { heading: hM[2].trim(), level, lines: [] }
+          sections.push(cur)
+          continue
+        }
+        // H1 closes any open section; the H1 line and any prose following it
+        // (until the next h2/h3) lands in \`intro\`. Without this reset, a
+        // page with a mid-document H1 would silently glue the H1 onto the
+        // previous section's body.
+        if (level === 1) cur = intro
+      }
+      cur.lines.push(line)
+    }
+    const trim = (arr) => arr.join("\\n").replace(/^\\n+|\\n+$/g, "")
+    return {
+      intro: trim(intro.lines),
+      sections: sections.map((s) => ({
+        heading: s.heading,
+        level: s.level,
+        body: trim(s.lines),
+      })),
+    }
+  }
+
+  // ----- PDF export (browser print to PDF via hidden iframe) ----------------
+  // No JS-side PDF library: we build the same standalone HTML the .html
+  // exporter produces, drop it into a hidden iframe, and call print() on
+  // the iframe's window. The user picks "Save as PDF" in the browser's
+  // print dialog. This avoids a popup window (which most browsers block by
+  // default) and any server-side rendering, at the cost of one extra
+  // click compared to a "real" PDF export.
+  async function exportPdf(checked) {
+    const center = document.querySelector(".center")
+    if (!center) return
+    const css = await collectCss()
+    const titleText = getTitleText()
+    const clone = center.cloneNode(true)
+    clone.querySelectorAll("[src]").forEach((el) => absolutizeAttr(el, "src"))
+    clone.querySelectorAll("[href]").forEach((el) => absolutizeAttr(el, "href"))
+    filterClonedArticle(clone, checked)
+    // \`@page\` hints the print dialog at sensible margins; \`color-adjust:
+    // exact\` keeps code-block backgrounds and callout fills from being
+    // washed out under the browser's default print colour adjustment.
+    const printStyle =
+      "@media print { @page { margin: 1.6cm; } " +
+      "html, body { background: white !important; } " +
+      "* { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } " +
+      "}"
+    const html = buildStandaloneHtml(clone, css, titleText, printStyle)
+
+    const iframe = document.createElement("iframe")
+    iframe.setAttribute("aria-hidden", "true")
+    iframe.style.cssText = "position:fixed; right:0; bottom:0; width:0; height:0; border:0; visibility:hidden;"
+    document.body.appendChild(iframe)
+    iframe.srcdoc = html
+    iframe.addEventListener("load", () => {
+      const win = iframe.contentWindow
+      if (!win) { iframe.remove(); return }
+      // Some browsers (Safari) only fire afterprint reliably; others
+      // (Chrome) return synchronously from print(). The 60s fallback
+      // guarantees the iframe doesn't leak if neither path triggers.
+      let removed = false
+      const cleanup = () => { if (!removed) { removed = true; iframe.remove() } }
+      win.addEventListener("afterprint", cleanup)
+      try { win.focus(); win.print() } catch (e) { cleanup(); return }
+      setTimeout(cleanup, 60000)
+    }, { once: true })
+  }
+
+  // ----- ZIP bundle export (HTML + same-origin images) ---------------------
+  // For users who want a real offline archive: the standalone HTML plus
+  // every image it references, fetched and rewritten to local paths. Same
+  // structure as a saved-page bundle in a browser, but built deterministically
+  // (no race against lazy-loaded assets) and without the "page_files/"
+  // directory clutter browsers add.
+  //
+  // The ZIP is written in STORE mode (no compression) so we don't need to
+  // pull in a deflate implementation. PNG / JPEG / WebP are already
+  // compressed image formats, and the HTML file is small, so the size hit
+  // is minor in practice.
+  async function exportZip(checked) {
+    const center = document.querySelector(".center")
+    if (!center) return
+    const css = await collectCss()
+    const titleText = getTitleText()
+    const clone = center.cloneNode(true)
+    // Filter first so we don't fetch images that belong to dropped sections.
+    filterClonedArticle(clone, checked)
+    // Hrefs (text links) absolutize back to the live site — same as the
+    // .html export. Images are special-cased below: same-origin ones are
+    // fetched and bundled, cross-origin ones are absolutized so they
+    // continue to work when the user views the bundled HTML online.
+    clone.querySelectorAll("[href]").forEach((el) => absolutizeAttr(el, "href"))
+
+    const usedNames = new Set()
+    function pickLocalName(url) {
+      let pathname = ""
+      try { pathname = new URL(url).pathname } catch (e) { return "images/asset.bin" }
+      let base = pathname.split("/").pop() || "asset"
+      // Browsers tolerate spaces / unicode in zip filenames but some zip
+      // tools don't. Normalize to a conservative subset. \`decodeURIComponent\`
+      // throws URIError on malformed % escapes (e.g. literal \`%\` in a
+      // filename); fall back to the undecoded base rather than aborting
+      // the entire ZIP.
+      try { base = decodeURIComponent(base) } catch (e) {}
+      base = base.replace(/[^A-Za-z0-9._-]+/g, "_")
+      if (!base || base === "_") base = "asset"
+      if (!base.includes(".")) base += ".bin"
+      let name = base
+      let i = 1
+      while (usedNames.has(name)) {
+        const dot = base.lastIndexOf(".")
+        name = base.slice(0, dot) + "-" + i + base.slice(dot)
+        i++
+      }
+      usedNames.add(name)
+      return "images/" + name
+    }
+
+    // Two-pass: collect (img, abs) pairs and the deduped URL set, fetch in
+    // parallel, then rewrite \`src\` only for URLs whose fetch actually
+    // succeeded. Eager rewriting (the previous shape) left a dead path in
+    // \`index.html\` whenever a same-origin fetch returned non-OK — the local
+    // file was filtered out before entry creation, so the bundle pointed at
+    // a name it never wrote.
+    const tasks = []
+    const uniqUrls = new Set()
+    clone.querySelectorAll("img[src]").forEach((img) => {
+      const v = img.getAttribute("src")
+      if (!v) return
+      let url
+      try { url = new URL(v, location.href) } catch (e) { return }
+      const abs = url.href
+      // Compare \`URL.origin\`, not \`href.startsWith(location.origin)\`. The
+      // prefix form misclassifies \`https://example.com.evil.net/foo.png\`
+      // as same-origin against \`https://example.com\`.
+      if (url.origin !== location.origin) {
+        // Cross-origin: leave the absolute URL so the bundled HTML still
+        // resolves it from the network when the user views the file.
+        img.setAttribute("src", abs)
+        return
+      }
+      tasks.push({ img, abs })
+      uniqUrls.add(abs)
+    })
+    // Same handling for srcset would multiply fetches with marginal value
+    // for a static-archive use case; stripping srcset keeps the bundle
+    // simple and predictable.
+    clone.querySelectorAll("img[srcset]").forEach((img) => img.removeAttribute("srcset"))
+
+    const urls = Array.from(uniqUrls)
+    const buffers = await Promise.all(
+      urls.map((u) =>
+        fetch(u)
+          .then((r) => (r.ok ? r.arrayBuffer() : null))
+          .catch(() => null),
+      ),
+    )
+    // Reserve local names only for URLs we actually fetched, so a failed
+    // fetch doesn't burn a name slot or leave the bundle inconsistent.
+    const localByUrl = new Map()
+    const fetched = []
+    urls.forEach((u, i) => {
+      const buf = buffers[i]
+      if (!buf) return
+      const local = pickLocalName(u)
+      localByUrl.set(u, local)
+      fetched.push({ local, data: new Uint8Array(buf) })
+    })
+    for (const t of tasks) {
+      const local = localByUrl.get(t.abs)
+      // Successful fetch → point at the bundled file. Failure → keep the
+      // absolute URL so the image still loads online when the bundle is
+      // viewed against the live site, and degrades cleanly to a "broken
+      // image" icon offline rather than a 404 inside the archive.
+      t.img.setAttribute("src", local || t.abs)
+    }
+
+    const html = buildStandaloneHtml(clone, css, titleText)
+    const enc = new TextEncoder()
+    const entries = [{ name: "index.html", data: enc.encode(html) }]
+    for (const f of fetched) entries.push({ name: f.local, data: f.data })
+
+    triggerDownload(buildZip(entries), titleText, "zip")
+  }
+
+  // ----- ZIP encoder (STORE mode only, hand-rolled) -------------------------
+  // PKZIP format: per-file local headers, a central directory with one
+  // entry per file, and an end-of-central-directory record. STORE means
+  // compression method 0 (no compression), which keeps us out of needing
+  // a deflate implementation. Sizes that would overflow uint32 trigger
+  // ZIP64 in the spec; we don't generate that — a single-page bundle
+  // shouldn't approach 4 GiB.
+  const CRC_TABLE = (function () {
+    const t = new Uint32Array(256)
+    for (let n = 0; n < 256; n++) {
+      let c = n
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1)
+      t[n] = c >>> 0
+    }
+    return t
+  })()
+
+  function crc32(bytes) {
+    let c = 0xffffffff
+    for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8)
+    return (c ^ 0xffffffff) >>> 0
+  }
+
+  function buildZip(entries) {
+    const enc = new TextEncoder()
+    const parts = []
+    const central = []
+    let offset = 0
+    for (const e of entries) {
+      const name = enc.encode(e.name)
+      const data = e.data
+      const crc = crc32(data)
+      const size = data.length
+      const lfh = new Uint8Array(30)
+      const dvL = new DataView(lfh.buffer)
+      dvL.setUint32(0, 0x04034b50, true)
+      dvL.setUint16(4, 20, true)
+      dvL.setUint16(6, 0, true)
+      dvL.setUint16(8, 0, true)
+      dvL.setUint16(10, 0, true)
+      dvL.setUint16(12, 0x21, true) // dummy date (1980-01-01)
+      dvL.setUint32(14, crc, true)
+      dvL.setUint32(18, size, true)
+      dvL.setUint32(22, size, true)
+      dvL.setUint16(26, name.length, true)
+      dvL.setUint16(28, 0, true)
+      parts.push(lfh, name, data)
+
+      const cdh = new Uint8Array(46)
+      const dvC = new DataView(cdh.buffer)
+      dvC.setUint32(0, 0x02014b50, true)
+      dvC.setUint16(4, 20, true)
+      dvC.setUint16(6, 20, true)
+      dvC.setUint16(8, 0, true)
+      dvC.setUint16(10, 0, true)
+      dvC.setUint16(12, 0, true)
+      dvC.setUint16(14, 0x21, true)
+      dvC.setUint32(16, crc, true)
+      dvC.setUint32(20, size, true)
+      dvC.setUint32(24, size, true)
+      dvC.setUint16(28, name.length, true)
+      dvC.setUint16(30, 0, true)
+      dvC.setUint16(32, 0, true)
+      dvC.setUint16(34, 0, true)
+      dvC.setUint16(36, 0, true)
+      dvC.setUint32(38, 0, true)
+      dvC.setUint32(42, offset, true)
+      central.push(cdh, name)
+
+      offset += 30 + name.length + size
+    }
+    const cdStart = offset
+    let cdSize = 0
+    for (const p of central) cdSize += p.length
+    const eocd = new Uint8Array(22)
+    const dvE = new DataView(eocd.buffer)
+    dvE.setUint32(0, 0x06054b50, true)
+    dvE.setUint16(4, 0, true)
+    dvE.setUint16(6, 0, true)
+    dvE.setUint16(8, entries.length, true)
+    dvE.setUint16(10, entries.length, true)
+    dvE.setUint32(12, cdSize, true)
+    dvE.setUint32(16, cdStart, true)
+    dvE.setUint16(20, 0, true)
+
+    return new Blob([...parts, ...central, eocd], { type: "application/zip" })
   }
 
   function stripFrontmatter(md) {
@@ -615,7 +1304,13 @@ document.addEventListener("nav", () => {
     }
     try {
       if (fmt === "html") await exportHtml(checked)
+      else if (fmt === "pdf") await exportPdf(checked)
+      else if (fmt === "md") await exportMarkdown(checked)
+      else if (fmt === "txt") await exportText(checked)
       else if (fmt === "ipynb") await exportIpynb(checked)
+      else if (fmt === "tex") await exportLatex(checked)
+      else if (fmt === "json") await exportJson(checked)
+      else if (fmt === "zip") await exportZip(checked)
     } finally {
       btn.textContent = orig
       btn.removeAttribute("disabled")
@@ -692,11 +1387,65 @@ const ExportArticle: QuartzComponent = ({ fileData }: QuartzComponentProps) => {
           <button
             type="button"
             role="menuitem"
+            data-fmt="pdf"
+            data-router-ignore="true"
+            style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
+          >
+            PDF
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            data-fmt="md"
+            data-router-ignore="true"
+            style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
+          >
+            Markdown
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            data-fmt="txt"
+            data-router-ignore="true"
+            style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
+          >
+            Plain text
+          </button>
+          <button
+            type="button"
+            role="menuitem"
             data-fmt="ipynb"
             data-router-ignore="true"
             style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
           >
             Jupyter Notebook
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            data-fmt="tex"
+            data-router-ignore="true"
+            style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
+          >
+            LaTeX
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            data-fmt="json"
+            data-router-ignore="true"
+            style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
+          >
+            JSON
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            data-fmt="zip"
+            data-router-ignore="true"
+            style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
+          >
+            ZIP (HTML + assets)
           </button>
         </div>
       </div>
