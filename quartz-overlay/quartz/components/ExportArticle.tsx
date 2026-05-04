@@ -1023,14 +1023,17 @@ document.addEventListener("nav", () => {
     }
     sectionsEl.style.display = ""
 
+    const title = document.createElement("div")
+    title.className = "export-col-title"
+    title.textContent = "Include sections"
+    sectionsEl.appendChild(title)
+
     const header = document.createElement("label")
     header.className = "export-section-row export-section-all"
-    header.style.cssText = "display: flex; align-items: center; gap: 0.4em; padding: 0.3em 0.6em 0.3em 0.6em; border-bottom: 1px solid var(--lightgray); cursor: pointer; font-weight: 600; color: var(--dark);"
     const allCb = document.createElement("input")
     allCb.type = "checkbox"
     allCb.checked = true
     allCb.dataset.role = "all"
-    allCb.style.margin = "0"
     const allText = document.createElement("span")
     allText.textContent = "All sections"
     header.appendChild(allCb)
@@ -1039,7 +1042,6 @@ document.addEventListener("nav", () => {
 
     const list = document.createElement("div")
     list.className = "export-section-list"
-    list.style.cssText = "max-height: 30vh; overflow-y: auto; padding: 0.2em 0;"
     sectionsEl.appendChild(list)
 
     let lastH2 = -1
@@ -1049,22 +1051,18 @@ document.addEventListener("nav", () => {
       // that uses h3 as its top level (no h2s), indenting orphans would
       // be misleading.
       const isOrphanH3 = h.level === 3 && lastH2 === -1
-      const indent = h.level === 3 && !isOrphanH3 ? "1.8em" : "0.6em"
+      const isSub = h.level === 3 && !isOrphanH3
       const row = document.createElement("label")
-      row.className = "export-section-row"
-      row.style.cssText = "display: flex; align-items: center; gap: 0.4em; padding: 0.2em 0.6em 0.2em " + indent + "; cursor: pointer; color: var(--dark);"
+      row.className = "export-section-row" + (isSub ? " is-sub" : "")
       const cb = document.createElement("input")
       cb.type = "checkbox"
       cb.checked = true
       cb.dataset.idx = String(idx)
       cb.dataset.level = String(h.level)
-      if (h.level === 3 && !isOrphanH3) cb.dataset.parent = String(lastH2)
-      cb.style.margin = "0"
+      if (isSub) cb.dataset.parent = String(lastH2)
       row.appendChild(cb)
       const span = document.createElement("span")
       span.textContent = h.text
-      span.style.cssText = "overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
-      if (h.level === 3 && !isOrphanH3) span.style.color = "var(--gray)"
       row.appendChild(span)
       list.appendChild(row)
     })
@@ -1345,113 +1343,214 @@ const ExportArticle: QuartzComponent = ({ fileData }: QuartzComponentProps) => {
   // (Enter/Space on the summary). data-router-ignore stops Quartz's SPA
   // router from intercepting clicks inside this widget.
   //
-  // Hide the default disclosure marker on the summary. `list-style: none`
-  // covers Firefox / Chrome 89+; the ::-webkit-details-marker rule covers
-  // older Safari. Kept inline so the widget stays self-contained — no
-  // separate stylesheet needed.
+  // The inline <style> keeps the widget self-contained (no separate
+  // stylesheet to wire up) and the rules are scoped under .export-article
+  // so they can't leak. The script also sets sectionsEl.style.display
+  // imperatively to "" or "none"; that interplay relies on the rules
+  // here providing the *default* display when the inline style is empty.
   return (
     <details
       class="export-article"
       data-slug={fileData.slug}
       data-router-ignore="true"
-      style="float: right; margin: 0; font-size: 1.1em; line-height: 1; position: relative;"
     >
-      <style>{`.export-article > summary { list-style: none; }
-.export-article > summary::-webkit-details-marker { display: none; }
-.export-article > summary::marker { content: ""; }`}</style>
+      <style>{exportMenuStyles}</style>
       <summary
         class="export-article-btn"
         role="button"
         aria-label="Export this page"
         title="Export this page"
-        style="cursor: pointer; color: var(--secondary); padding: 0.25em 0.4em;"
       >
         ⤓
       </summary>
-      <div
-        class="export-menu"
-        role="menu"
-        style="position: absolute; right: 0; top: 100%; min-width: 14em; max-width: 22em; background: var(--light); border: 1px solid var(--lightgray); border-radius: 4px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); padding: 0.25em 0; z-index: 5; font-size: 0.9rem;"
-      >
+      <div class="export-menu" role="menu">
         <div class="export-sections" data-router-ignore="true" style="display: none;"></div>
         <div class="export-formats">
-          <button
-            type="button"
-            role="menuitem"
-            data-fmt="html"
-            data-router-ignore="true"
-            style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
-          >
-            HTML
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            data-fmt="pdf"
-            data-router-ignore="true"
-            style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
-          >
-            PDF
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            data-fmt="md"
-            data-router-ignore="true"
-            style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
-          >
-            Markdown
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            data-fmt="txt"
-            data-router-ignore="true"
-            style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
-          >
-            Plain text
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            data-fmt="ipynb"
-            data-router-ignore="true"
-            style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
-          >
-            Jupyter Notebook
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            data-fmt="tex"
-            data-router-ignore="true"
-            style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
-          >
-            LaTeX
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            data-fmt="json"
-            data-router-ignore="true"
-            style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
-          >
-            JSON
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            data-fmt="zip"
-            data-router-ignore="true"
-            style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
-          >
-            ZIP (HTML + assets)
-          </button>
+          <div class="export-col-title">Download as</div>
+          <div class="export-formats-grid">
+            <button type="button" role="menuitem" data-fmt="html" data-router-ignore="true">
+              <span class="export-fmt-name">HTML</span>
+              <span class="export-fmt-ext">.html</span>
+            </button>
+            <button type="button" role="menuitem" data-fmt="pdf" data-router-ignore="true">
+              <span class="export-fmt-name">PDF</span>
+              <span class="export-fmt-ext">.pdf</span>
+            </button>
+            <button type="button" role="menuitem" data-fmt="md" data-router-ignore="true">
+              <span class="export-fmt-name">Markdown</span>
+              <span class="export-fmt-ext">.md</span>
+            </button>
+            <button type="button" role="menuitem" data-fmt="txt" data-router-ignore="true">
+              <span class="export-fmt-name">Plain text</span>
+              <span class="export-fmt-ext">.txt</span>
+            </button>
+            <button type="button" role="menuitem" data-fmt="ipynb" data-router-ignore="true">
+              <span class="export-fmt-name">Jupyter</span>
+              <span class="export-fmt-ext">.ipynb</span>
+            </button>
+            <button type="button" role="menuitem" data-fmt="tex" data-router-ignore="true">
+              <span class="export-fmt-name">LaTeX</span>
+              <span class="export-fmt-ext">.tex</span>
+            </button>
+            <button type="button" role="menuitem" data-fmt="json" data-router-ignore="true">
+              <span class="export-fmt-name">JSON</span>
+              <span class="export-fmt-ext">.json</span>
+            </button>
+            <button type="button" role="menuitem" data-fmt="zip" data-router-ignore="true">
+              <span class="export-fmt-name">ZIP archive</span>
+              <span class="export-fmt-ext">.zip</span>
+            </button>
+          </div>
         </div>
       </div>
     </details>
   )
 }
+
+const exportMenuStyles = `
+.export-article {
+  float: right;
+  margin: 0;
+  font-size: 1.1em;
+  line-height: 1;
+  position: relative;
+}
+.export-article > summary { list-style: none; }
+.export-article > summary::-webkit-details-marker { display: none; }
+.export-article > summary::marker { content: ""; }
+.export-article-btn {
+  cursor: pointer;
+  color: var(--secondary);
+  padding: 0.25em 0.4em;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+}
+.export-article-btn:hover,
+.export-article[open] > .export-article-btn {
+  background: var(--lightgray);
+}
+
+.export-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  display: flex;
+  background: var(--light);
+  border: 1px solid var(--lightgray);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
+  z-index: 5;
+  font-size: 0.85rem;
+  overflow: hidden;
+}
+
+.export-menu .export-sections {
+  flex-direction: column;
+  width: 16em;
+  padding: 0.7em 0;
+  border-right: 1px solid var(--lightgray);
+}
+
+.export-col-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gray);
+  padding: 0 0.9em;
+  margin: 0 0 0.4em;
+}
+
+.export-section-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.3em 0.9em;
+  cursor: pointer;
+  color: var(--dark);
+  transition: background 0.1s ease;
+}
+.export-section-row:hover { background: var(--lightgray); }
+.export-section-row input[type="checkbox"] {
+  margin: 0;
+  flex-shrink: 0;
+}
+.export-section-row > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.export-section-row.is-sub {
+  padding-left: 1.8em;
+}
+.export-section-row.is-sub > span { color: var(--gray); }
+.export-section-all {
+  font-weight: 600;
+  border-bottom: 1px solid var(--lightgray);
+  padding-bottom: 0.45em;
+  margin-bottom: 0.3em;
+}
+.export-section-list {
+  max-height: 30vh;
+  overflow-y: auto;
+}
+
+.export-formats {
+  padding: 0.7em 0.7em 0.8em;
+  width: 18em;
+}
+.export-formats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.2em;
+}
+.export-formats button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1em;
+  padding: 0.45em 0.65em;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--dark);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+.export-formats button:hover {
+  background: var(--lightgray);
+  border-color: var(--lightgray);
+}
+.export-formats button:focus-visible {
+  outline: 2px solid var(--secondary);
+  outline-offset: -1px;
+}
+.export-fmt-name {
+  font-weight: 500;
+  font-size: 0.875rem;
+  line-height: 1.2;
+}
+.export-fmt-ext {
+  font-size: 0.7rem;
+  color: var(--gray);
+  font-family: var(--codeFont, ui-monospace, "SFMono-Regular", Menlo, monospace);
+}
+
+@media (max-width: 560px) {
+  .export-menu {
+    flex-direction: column;
+    max-width: calc(100vw - 1em);
+  }
+  .export-menu .export-sections {
+    width: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--lightgray);
+  }
+  .export-formats { width: auto; }
+}
+`
 
 ExportArticle.afterDOMLoaded = exportScript
 
