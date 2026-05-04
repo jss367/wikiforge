@@ -1,4 +1,5 @@
 import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
+import style from "./styles/exportArticle.scss"
 
 // Inline client script. Quartz bundles each component's `afterDOMLoaded`
 // string and runs it after every SPA navigation, so we re-bind on each
@@ -1025,12 +1026,10 @@ document.addEventListener("nav", () => {
 
     const header = document.createElement("label")
     header.className = "export-section-row export-section-all"
-    header.style.cssText = "display: flex; align-items: center; gap: 0.4em; padding: 0.3em 0.6em 0.3em 0.6em; border-bottom: 1px solid var(--lightgray); cursor: pointer; font-weight: 600; color: var(--dark);"
     const allCb = document.createElement("input")
     allCb.type = "checkbox"
     allCb.checked = true
     allCb.dataset.role = "all"
-    allCb.style.margin = "0"
     const allText = document.createElement("span")
     allText.textContent = "All sections"
     header.appendChild(allCb)
@@ -1039,7 +1038,6 @@ document.addEventListener("nav", () => {
 
     const list = document.createElement("div")
     list.className = "export-section-list"
-    list.style.cssText = "max-height: 30vh; overflow-y: auto; padding: 0.2em 0;"
     sectionsEl.appendChild(list)
 
     let lastH2 = -1
@@ -1047,24 +1045,19 @@ document.addEventListener("nav", () => {
       if (h.level === 2) lastH2 = idx
       // Only indent h3s when they actually nest under an h2. On a doc
       // that uses h3 as its top level (no h2s), indenting orphans would
-      // be misleading.
+      // be misleading — drop the .is-h3 indent class for those.
       const isOrphanH3 = h.level === 3 && lastH2 === -1
-      const indent = h.level === 3 && !isOrphanH3 ? "1.8em" : "0.6em"
       const row = document.createElement("label")
-      row.className = "export-section-row"
-      row.style.cssText = "display: flex; align-items: center; gap: 0.4em; padding: 0.2em 0.6em 0.2em " + indent + "; cursor: pointer; color: var(--dark);"
+      row.className = "export-section-row" + (h.level === 3 && !isOrphanH3 ? " is-h3" : "")
       const cb = document.createElement("input")
       cb.type = "checkbox"
       cb.checked = true
       cb.dataset.idx = String(idx)
       cb.dataset.level = String(h.level)
       if (h.level === 3 && !isOrphanH3) cb.dataset.parent = String(lastH2)
-      cb.style.margin = "0"
       row.appendChild(cb)
       const span = document.createElement("span")
       span.textContent = h.text
-      span.style.cssText = "overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
-      if (h.level === 3 && !isOrphanH3) span.style.color = "var(--gray)"
       row.appendChild(span)
       list.appendChild(row)
     })
@@ -1343,108 +1336,52 @@ const ExportArticle: QuartzComponent = ({ fileData }: QuartzComponentProps) => {
 
   // <details>/<summary> gives us native click-toggle and keyboard support
   // (Enter/Space on the summary). data-router-ignore stops Quartz's SPA
-  // router from intercepting clicks inside this widget.
-  //
-  // Hide the default disclosure marker on the summary. `list-style: none`
-  // covers Firefox / Chrome 89+; the ::-webkit-details-marker rule covers
-  // older Safari. Kept inline so the widget stays self-contained — no
-  // separate stylesheet needed.
+  // router from intercepting clicks inside this widget. All styling lives
+  // in styles/exportArticle.scss.
   return (
-    <details
-      class="export-article"
-      data-slug={fileData.slug}
-      data-router-ignore="true"
-      style="float: right; margin: 0; font-size: 1.1em; line-height: 1; position: relative;"
-    >
-      <style>{`.export-article > summary { list-style: none; }
-.export-article > summary::-webkit-details-marker { display: none; }
-.export-article > summary::marker { content: ""; }`}</style>
+    <details class="export-article" data-slug={fileData.slug} data-router-ignore="true">
       <summary
         class="export-article-btn"
         role="button"
         aria-label="Export this page"
         title="Export this page"
-        style="cursor: pointer; color: var(--secondary); padding: 0.25em 0.4em;"
       >
-        ⤓
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M12 4v12" />
+          <path d="m6 12 6 6 6-6" />
+          <path d="M5 21h14" />
+        </svg>
       </summary>
-      <div
-        class="export-menu"
-        role="menu"
-        style="position: absolute; right: 0; top: 100%; min-width: 14em; max-width: 22em; background: var(--light); border: 1px solid var(--lightgray); border-radius: 4px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); padding: 0.25em 0; z-index: 5; font-size: 0.9rem;"
-      >
+      <div class="export-menu" role="menu">
         <div class="export-sections" data-router-ignore="true" style="display: none;"></div>
         <div class="export-formats">
-          <button
-            type="button"
-            role="menuitem"
-            data-fmt="html"
-            data-router-ignore="true"
-            style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
-          >
+          <button type="button" role="menuitem" data-fmt="html" data-router-ignore="true">
             HTML
           </button>
-          <button
-            type="button"
-            role="menuitem"
-            data-fmt="pdf"
-            data-router-ignore="true"
-            style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
-          >
+          <button type="button" role="menuitem" data-fmt="pdf" data-router-ignore="true">
             PDF
           </button>
-          <button
-            type="button"
-            role="menuitem"
-            data-fmt="md"
-            data-router-ignore="true"
-            style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
-          >
+          <button type="button" role="menuitem" data-fmt="md" data-router-ignore="true">
             Markdown
           </button>
-          <button
-            type="button"
-            role="menuitem"
-            data-fmt="txt"
-            data-router-ignore="true"
-            style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
-          >
+          <button type="button" role="menuitem" data-fmt="txt" data-router-ignore="true">
             Plain text
           </button>
-          <button
-            type="button"
-            role="menuitem"
-            data-fmt="ipynb"
-            data-router-ignore="true"
-            style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
-          >
+          <button type="button" role="menuitem" data-fmt="ipynb" data-router-ignore="true">
             Jupyter Notebook
           </button>
-          <button
-            type="button"
-            role="menuitem"
-            data-fmt="tex"
-            data-router-ignore="true"
-            style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
-          >
+          <button type="button" role="menuitem" data-fmt="tex" data-router-ignore="true">
             LaTeX
           </button>
-          <button
-            type="button"
-            role="menuitem"
-            data-fmt="json"
-            data-router-ignore="true"
-            style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
-          >
+          <button type="button" role="menuitem" data-fmt="json" data-router-ignore="true">
             JSON
           </button>
-          <button
-            type="button"
-            role="menuitem"
-            data-fmt="zip"
-            data-router-ignore="true"
-            style="display: block; width: 100%; text-align: left; padding: 0.4em 0.8em; background: none; border: none; color: var(--dark); cursor: pointer; font: inherit;"
-          >
+          <button type="button" role="menuitem" data-fmt="zip" data-router-ignore="true">
             ZIP (HTML + assets)
           </button>
         </div>
@@ -1454,5 +1391,6 @@ const ExportArticle: QuartzComponent = ({ fileData }: QuartzComponentProps) => {
 }
 
 ExportArticle.afterDOMLoaded = exportScript
+ExportArticle.css = style
 
 export default (() => ExportArticle) satisfies QuartzComponentConstructor

@@ -47,10 +47,18 @@
 
 // Subtle gray on code block background. --lightgray picks up the right
 // shade in both light and dark modes, so github-light and github-dark
-// syntax themes both stay readable.
-pre,
-pre > code {
+// syntax themes both stay readable. The 1px border + radius give it a
+// modern docs-site feel without obscuring syntax-highlighted content.
+pre {
   background-color: var(--lightgray);
+  border: 1px solid var(--lightgray);
+  border-radius: 6px;
+  padding: 0.85em 1em;
+}
+
+pre > code {
+  background-color: transparent;
+  padding: 0;
 }
 
 // Wikipedia-style redlinks: unresolved [[wikilinks]] render in red so readers
@@ -83,7 +91,7 @@ pre > code {
   th,
   td {
     border: 1px solid var(--lightgray);
-    padding: 0.3em 0.6em;
+    padding: 0.5em 0.85em;
     text-align: left;
     vertical-align: top;
   }
@@ -91,6 +99,15 @@ pre > code {
   th {
     background-color: var(--wikitable-header);
     font-weight: 600;
+  }
+
+  // Subtle row hover pulls the eye along long tables without changing
+  // their character. Skips header rows so the colored header stays put.
+  tbody tr {
+    transition: background-color 120ms ease;
+  }
+  tbody tr:hover {
+    background-color: var(--highlight);
   }
 }
 
@@ -103,4 +120,47 @@ pre > code {
   // Slightly lighter than --lightgray so the header still reads as a header
   // against the dark table body, without jumping forward visually.
   --wikitable-header: #2a2a2e;
+}
+
+// Shared "page meta" line — small subdued text used for the edit link, last
+// edited timestamp, and similar one-liners that sit above and below the
+// article body. Centralised here so the spacing/size/colour stay consistent
+// across components instead of drifting via per-component inline styles.
+.page-meta {
+  margin: 0.4em 0;
+  font-size: 0.85em;
+  color: var(--gray);
+
+  a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    color: var(--secondary);
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  svg {
+    width: 0.95em;
+    height: 0.95em;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
+  }
+}
+
+// LastEdited sits at the bottom of the article and gets a top divider so it
+// reads as a footer rather than another paragraph. Inherits the small/dim
+// type from .page-meta.
+.page-meta.last-edited {
+  margin-top: 2em;
+  padding-top: 0.5em;
+  border-top: 1px solid var(--lightgray);
+  font-size: 0.8em;
 }
