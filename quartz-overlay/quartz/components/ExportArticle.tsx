@@ -160,20 +160,279 @@ document.addEventListener("nav", () => {
     return (titleEl && titleEl.textContent) || document.title || "page"
   }
 
-  // ----- Markdown export (raw .md, frontmatter stripped) -------------------
-  // The source file is already markdown; this exporter just hands it back to
-  // the user with frontmatter stripped (otherwise the YAML block re-renders
-  // as a "---" thematic break + table on systems without frontmatter
-  // support) and the section picker applied.
-  async function exportMarkdown(checked) {
+  // ----- Markdown export (zip-bundled with images, default) ---------------
+  // The source file is already markdown; the only thing this exporter has to
+  // resolve is image references. Source-markdown image syntax (\`![alt](url)\`,
+  // \`![[wiki]]\`, \`<img>\`) and rendered \`<img>\` tags appear in the same
+  // document order, so the i'th source ref pairs with the i'th DOM image.
+  // If counts diverge — a plugin injected an extra image, a wikilink failed
+  // to resolve, etc. — we ship the raw markdown unchanged rather than risk
+  // pairing references with the wrong assets.
+  //
+  // Same-origin images get fetched and bundled into an \`images/\` folder.
+  // Cross-origin images stay as absolute URLs so they load against the
+  // network when the user views the file online.
+  async function exportMarkdownZip(checked) {
     const rawMd = await fetchSourceMd()
     if (rawMd == null) return
     const md = filterMarkdownByHeadings(stripFrontmatter(rawMd), checked)
-    triggerDownload(
-      new Blob([md], { type: "text/markdown;charset=utf-8" }),
-      getTitleText(),
-      "md",
+    const titleText = getTitleText()
+
+    const targets = await resolveMdImageTargets(md, checked, "local")
+    if (!targets) {
+      // No DOM available, count mismatch, or no images at all. The first two
+      // are recoverable failures; the third doesn't need a zip wrapper. All
+      // three land here and ship the unmodified markdown.
+      triggerDownload(new Blob([md], { type: "text/markdown;charset=utf-8" }), titleText, "md")
+      return
+    }
+    const newMd = rewriteMdImages(md, targets.refs, targets.targets)
+    if (newMd == null || targets.entries.length === 0) {
+      // rewriteMdImages returns null only on a count mismatch, which
+      // shouldn't reach here (resolveMdImageTargets filters that case).
+      // Empty entries means every image was cross-origin or failed to
+      // fetch — skip the zip wrapper, the rewritten markdown still loads
+      // images against the network when viewed online.
+      triggerDownload(
+        new Blob([newMd || md], { type: "text/markdown;charset=utf-8" }),
+        titleText,
+        "md",
+      )
+      return
+    }
+
+    const enc = new TextEncoder()
+    const entries = [
+      { name: slugify(titleText) + ".md", data: enc.encode(newMd) },
+      ...targets.entries,
+    ]
+    triggerDownload(buildZip(entries), titleText, "zip")
+  }
+
+  // ----- Markdown export (single .md, base64-inlined images) --------------
+  // Same pairing logic as the zip variant; same-origin images are fetched
+  // and inlined as \`data:<mime>;base64,<...>\` URIs. Output is a single
+  // self-contained .md file, at the cost of ~33 % size inflation per image.
+  // Cross-origin images keep their absolute URL so they continue to render
+  // against the network.
+  async function exportMarkdownInline(checked) {
+    const rawMd = await fetchSourceMd()
+    if (rawMd == null) return
+    const md = filterMarkdownByHeadings(stripFrontmatter(rawMd), checked)
+    const titleText = getTitleText()
+
+    const targets = await resolveMdImageTargets(md, checked, "data")
+    if (!targets) {
+      triggerDownload(new Blob([md], { type: "text/markdown;charset=utf-8" }), titleText, "md")
+      return
+    }
+    const newMd = rewriteMdImages(md, targets.refs, targets.targets) || md
+    triggerDownload(new Blob([newMd], { type: "text/markdown;charset=utf-8" }), titleText, "md")
+  }
+
+  // Pair markdown image references with DOM-resolved image URLs and produce
+  // the per-reference rewrite targets. \`mode\` selects the encoding:
+  //   "local" — fetch same-origin images, return zip-relative paths plus a
+  //             list of zip entries to write
+  //   "data"  — fetch same-origin images, return base64 data URIs (no zip
+  //             entries; the caller writes a single .md)
+  // Returns null when the export should fall back to raw markdown:
+  //   - the article DOM isn't available
+  //   - the source has no images and the DOM has none either
+  //   - the count of source references and DOM images doesn't match
+  // Cross-origin URLs and fetch failures pass through as absolute URLs in
+  // both modes.
+  async function resolveMdImageTargets(md, checked, mode) {
+    const center = document.querySelector(".center")
+    if (!center) return null
+    const clone = center.cloneNode(true)
+    filterClonedArticle(clone, checked)
+
+    const urls = collectArticleImageUrls(clone)
+    const refs = findMdImageRefs(md)
+    if (urls.length === 0 && refs.length === 0) return null
+    if (urls.length !== refs.length) return null
+
+    const buffers = await Promise.all(
+      urls.map((u) => {
+        if (!u || u.origin !== location.origin) return Promise.resolve(null)
+        return fetch(u.href).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null)
+      }),
     )
+
+    const usedNames = new Set()
+    const entries = []
+    const targets = urls.map((u, i) => {
+      if (!u) return null
+      const buf = buffers[i]
+      if (!buf) return u.href
+      if (mode === "local") {
+        const local = pickLocalName(u.href, usedNames)
+        entries.push({ name: local, data: new Uint8Array(buf) })
+        return local
+      }
+      // mode === "data"
+      const mime = mimeFromName(u.pathname)
+      return "data:" + mime + ";base64," + bytesToBase64(new Uint8Array(buf))
+    })
+
+    return { refs, targets, entries }
+  }
+
+  // ----- shared image-bundling helpers -------------------------------------
+  // Lifted out of exportZip so the markdown bundlers can reuse the same
+  // local-name picker. \`usedNames\` is passed in (rather than closure-
+  // captured) because each export call needs its own deduplication scope.
+  function pickLocalName(url, usedNames) {
+    let pathname = ""
+    try { pathname = new URL(url).pathname } catch (e) { return "images/asset.bin" }
+    let base = pathname.split("/").pop() || "asset"
+    try { base = decodeURIComponent(base) } catch (e) {}
+    base = base.replace(/[^A-Za-z0-9._-]+/g, "_")
+    if (!base || base === "_") base = "asset"
+    if (!base.includes(".")) base += ".bin"
+    let name = base
+    let i = 1
+    while (usedNames.has(name)) {
+      const dot = base.lastIndexOf(".")
+      name = base.slice(0, dot) + "-" + i + base.slice(dot)
+      i++
+    }
+    usedNames.add(name)
+    return "images/" + name
+  }
+
+  // Markdown renderers (Jupyter, GitHub, VS Code) sniff the type prefix of a
+  // \`data:\` URI to decide whether to inline the asset. Without an image/*
+  // type the embed silently degrades to a placeholder, so we map the file
+  // extension to a MIME type explicitly.
+  function mimeFromName(name) {
+    const ext = (name.match(/\\.([A-Za-z0-9]+)$/) || ["", ""])[1].toLowerCase()
+    const map = {
+      png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
+      gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
+      avif: "image/avif", bmp: "image/bmp", ico: "image/x-icon",
+    }
+    return map[ext] || "application/octet-stream"
+  }
+
+  // \`btoa\` only takes a binary string, so we have to reconstruct one from
+  // the byte array. \`String.fromCharCode.apply\` blows past its argument
+  // limit (~65 k on most engines) for any image larger than that, so feed
+  // it 32 KiB at a time.
+  function bytesToBase64(bytes) {
+    let bin = ""
+    const chunk = 0x8000
+    for (let i = 0; i < bytes.length; i += chunk) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk))
+    }
+    return btoa(bin)
+  }
+
+  // Find image references in markdown source in document order. Each entry
+  // carries the absolute character offset (start/end), kind, and resolved
+  // alt text. Recognises three forms:
+  //   ![[target|alias]]     — Obsidian wikilink embed
+  //   ![alt](url "title")   — CommonMark image (optional title)
+  //   <img src="...">       — raw HTML
+  // Fenced code blocks are skipped so a literal \`![](x)\` inside a fence
+  // isn't mistaken for a real reference.
+  function findMdImageRefs(md) {
+    const refs = []
+    let inFence = false, fenceChar = "", fenceLen = 0
+    // CommonMark allows unbracketed image URLs to contain *balanced* parens
+    // (e.g. \`![cap](Screenshot (1).png)\` — common when Obsidian users paste
+    // copy-suffixed filenames as standard markdown). \`[^\\s>)]+\` matched
+    // only up to the first \`)\` and rewriteMdImages would then splice the
+    // truncated slice, leaving \`.png)\` as garbage. We accept one level of
+    // balanced parens, plus the angle-bracketed form \`<...>\` for URLs that
+    // contain spaces or deeper nesting.
+    const re = /!\\[\\[([^\\]|\\r\\n]+)(?:\\|([^\\]\\r\\n]+))?\\]\\]|!\\[([^\\]\\r\\n]*)\\]\\(\\s*(?:<[^>\\r\\n]*>|[^\\s()<>]+(?:\\([^\\s()<>]*\\)[^\\s()<>]*)*)\\s*(?:"[^"]*")?\\s*\\)|<img\\b[^>]*\\bsrc\\s*=\\s*["']([^"']+)["'][^>]*>/g
+    // Walk md preserving each line's terminator so character offsets stay
+    // correct under CRLF as well as LF. The split-on-/\\r?\\n/ form would
+    // collapse \\r\\n to a single advance, drifting offsets on Windows-
+    // authored sources and leaving rewriteMdImages to splice the wrong
+    // slices.
+    const lineRe = /[^\\r\\n]*(?:\\r\\n|\\r|\\n|$)/g
+    let lm
+    while ((lm = lineRe.exec(md)) !== null) {
+      if (lm[0].length === 0) break
+      const lineStart = lm.index
+      const line = lm[0].replace(/(?:\\r\\n|\\r|\\n)$/, "")
+      if (inFence) {
+        if (isFenceCloser(line, fenceChar, fenceLen)) inFence = false
+        continue
+      }
+      const fenceM = line.match(/^(\\s{0,3})([\\\`~]{3,})/)
+      if (fenceM) {
+        inFence = true
+        fenceChar = fenceM[2][0]
+        fenceLen = fenceM[2].length
+        continue
+      }
+      re.lastIndex = 0
+      let m
+      while ((m = re.exec(line)) !== null) {
+        let alt = ""
+        if (m[1] !== undefined) {
+          if (m[2]) alt = m[2]
+          else {
+            const base = m[1].split("/").pop() || ""
+            alt = base.replace(/\\.[^.]+$/, "")
+          }
+        } else if (m[3] !== undefined) {
+          alt = m[3]
+        } else if (m[4] !== undefined) {
+          // HTML <img>: the regex only captures \`src\`; pull \`alt\` out
+          // separately so we don't drop the descriptive text when rewriting
+          // \`<img alt="foo" src="bar">\` as \`![alt](url)\`.
+          const altM = /\\balt\\s*=\\s*["']([^"']*)["']/i.exec(m[0])
+          if (altM) alt = altM[1]
+        }
+        refs.push({
+          start: lineStart + m.index,
+          end: lineStart + m.index + m[0].length,
+          alt,
+        })
+      }
+    }
+    return refs
+  }
+
+  // Markdown alt text inside \`![...]\` can't carry unescaped brackets; if a
+  // wikilink's alias contained \`[\` or \`]\` we'd otherwise produce broken
+  // syntax once it's rewritten as \`![alt](url)\`.
+  function escapeMdAlt(s) {
+    return s.replace(/[\\[\\]]/g, "\\\\$&")
+  }
+
+  function collectArticleImageUrls(clone) {
+    const article = clone.querySelector("article") || clone
+    const out = []
+    article.querySelectorAll("img[src]").forEach((img) => {
+      const v = img.getAttribute("src")
+      if (!v) { out.push(null); return }
+      try { out.push(new URL(v, location.href)) }
+      catch (e) { out.push(null) }
+    })
+    return out
+  }
+
+  // Splice each ref's slice with \`![alt](target)\`. Walking refs in reverse
+  // keeps the absolute offsets in earlier refs valid as we mutate. \`null\`
+  // targets pass through unchanged (caller couldn't resolve a URL for that
+  // slot, e.g. malformed src).
+  function rewriteMdImages(md, refs, targets) {
+    if (refs.length !== targets.length) return null
+    let out = md
+    for (let i = refs.length - 1; i >= 0; i--) {
+      const ref = refs[i]
+      const target = targets[i]
+      if (target == null) continue
+      const replacement = "![" + escapeMdAlt(ref.alt) + "](" + target + ")"
+      out = out.slice(0, ref.start) + replacement + out.slice(ref.end)
+    }
+    return out
   }
 
   // ----- Plain text export --------------------------------------------------
@@ -631,29 +890,6 @@ document.addEventListener("nav", () => {
     clone.querySelectorAll("[href]").forEach((el) => absolutizeAttr(el, "href"))
 
     const usedNames = new Set()
-    function pickLocalName(url) {
-      let pathname = ""
-      try { pathname = new URL(url).pathname } catch (e) { return "images/asset.bin" }
-      let base = pathname.split("/").pop() || "asset"
-      // Browsers tolerate spaces / unicode in zip filenames but some zip
-      // tools don't. Normalize to a conservative subset. \`decodeURIComponent\`
-      // throws URIError on malformed % escapes (e.g. literal \`%\` in a
-      // filename); fall back to the undecoded base rather than aborting
-      // the entire ZIP.
-      try { base = decodeURIComponent(base) } catch (e) {}
-      base = base.replace(/[^A-Za-z0-9._-]+/g, "_")
-      if (!base || base === "_") base = "asset"
-      if (!base.includes(".")) base += ".bin"
-      let name = base
-      let i = 1
-      while (usedNames.has(name)) {
-        const dot = base.lastIndexOf(".")
-        name = base.slice(0, dot) + "-" + i + base.slice(dot)
-        i++
-      }
-      usedNames.add(name)
-      return "images/" + name
-    }
 
     // Two-pass: collect (img, abs) pairs and the deduped URL set, fetch in
     // parallel, then rewrite \`src\` only for URLs whose fetch actually
@@ -701,7 +937,7 @@ document.addEventListener("nav", () => {
     urls.forEach((u, i) => {
       const buf = buffers[i]
       if (!buf) return
-      const local = pickLocalName(u)
+      const local = pickLocalName(u, usedNames)
       localByUrl.set(u, local)
       fetched.push({ local, data: new Uint8Array(buf) })
     })
@@ -1307,7 +1543,8 @@ document.addEventListener("nav", () => {
     try {
       if (fmt === "html") await exportHtml(checked)
       else if (fmt === "pdf") await exportPdf(checked)
-      else if (fmt === "md") await exportMarkdown(checked)
+      else if (fmt === "md-zip") await exportMarkdownZip(checked)
+      else if (fmt === "md-inline") await exportMarkdownInline(checked)
       else if (fmt === "txt") await exportText(checked)
       else if (fmt === "ipynb") await exportIpynb(checked)
       else if (fmt === "tex") await exportLatex(checked)
@@ -1379,8 +1616,24 @@ const ExportArticle: QuartzComponent = ({ fileData }: QuartzComponentProps) => {
               <span class="export-fmt-name">PDF</span>
               <span class="export-fmt-ext">.pdf</span>
             </button>
-            <button type="button" role="menuitem" data-fmt="md" data-router-ignore="true">
+            <button
+              type="button"
+              role="menuitem"
+              data-fmt="md-zip"
+              data-router-ignore="true"
+              title="Markdown with images bundled into a zip archive"
+            >
               <span class="export-fmt-name">Markdown</span>
+              <span class="export-fmt-ext">.zip</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-fmt="md-inline"
+              data-router-ignore="true"
+              title="Single .md with images base64-inlined"
+            >
+              <span class="export-fmt-name">Markdown (inline)</span>
               <span class="export-fmt-ext">.md</span>
             </button>
             <button type="button" role="menuitem" data-fmt="txt" data-router-ignore="true">
