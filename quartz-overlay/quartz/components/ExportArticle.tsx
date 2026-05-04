@@ -339,15 +339,21 @@ document.addEventListener("nav", () => {
   // isn't mistaken for a real reference.
   function findMdImageRefs(md) {
     const refs = []
-    const lines = md.split(/\\r?\\n/)
     let inFence = false, fenceChar = "", fenceLen = 0
-    let offset = 0
     const re = /!\\[\\[([^\\]|\\r\\n]+)(?:\\|([^\\]\\r\\n]+))?\\]\\]|!\\[([^\\]\\r\\n]*)\\]\\(\\s*<?([^\\s>)]+)>?(?:\\s+"[^"]*")?\\s*\\)|<img\\b[^>]*\\bsrc\\s*=\\s*["']([^"']+)["'][^>]*>/g
-    for (const line of lines) {
-      const lineLen = line.length
+    // Walk md preserving each line's terminator so character offsets stay
+    // correct under CRLF as well as LF. The split-on-/\\r?\\n/ form would
+    // collapse \\r\\n to a single advance, drifting offsets on Windows-
+    // authored sources and leaving rewriteMdImages to splice the wrong
+    // slices.
+    const lineRe = /[^\\r\\n]*(?:\\r\\n|\\r|\\n|$)/g
+    let lm
+    while ((lm = lineRe.exec(md)) !== null) {
+      if (lm[0].length === 0) break
+      const lineStart = lm.index
+      const line = lm[0].replace(/(?:\\r\\n|\\r|\\n)$/, "")
       if (inFence) {
         if (isFenceCloser(line, fenceChar, fenceLen)) inFence = false
-        offset += lineLen + 1
         continue
       }
       const fenceM = line.match(/^(\\s{0,3})([\\\`~]{3,})/)
@@ -355,7 +361,6 @@ document.addEventListener("nav", () => {
         inFence = true
         fenceChar = fenceM[2][0]
         fenceLen = fenceM[2].length
-        offset += lineLen + 1
         continue
       }
       re.lastIndex = 0
@@ -372,12 +377,11 @@ document.addEventListener("nav", () => {
           alt = m[3]
         }
         refs.push({
-          start: offset + m.index,
-          end: offset + m.index + m[0].length,
+          start: lineStart + m.index,
+          end: lineStart + m.index + m[0].length,
           alt,
         })
       }
-      offset += lineLen + 1
     }
     return refs
   }
