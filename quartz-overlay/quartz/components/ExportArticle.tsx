@@ -382,6 +382,12 @@ document.addEventListener("nav", () => {
           }
         } else if (m[3] !== undefined) {
           alt = m[3]
+        } else if (m[4] !== undefined) {
+          // HTML <img>: the regex only captures \`src\`; pull \`alt\` out
+          // separately so we don't drop the descriptive text when rewriting
+          // \`<img alt="foo" src="bar">\` as \`![alt](url)\`.
+          const altM = /\\balt\\s*=\\s*["']([^"']*)["']/i.exec(m[0])
+          if (altM) alt = altM[1]
         }
         refs.push({
           start: lineStart + m.index,
