@@ -1288,7 +1288,11 @@ document.addEventListener("nav", () => {
   // ----- menu wiring --------------------------------------------------------
   async function runFormat(fmt, btn) {
     btn.setAttribute("disabled", "true")
-    const orig = btn.textContent
+    // Save innerHTML, not textContent: the format tiles contain nested
+    // <span>s for the name/extension lines, and a textContent round-trip
+    // would collapse them into a single text node — permanently flattening
+    // the styling on the first export.
+    const orig = btn.innerHTML
     btn.textContent = "Exporting…"
     const checked = getCheckedIndices()
     // Bail early on an explicit empty selection — exporting a notebook
@@ -1296,7 +1300,7 @@ document.addEventListener("nav", () => {
     // a misclick, and the silent-no-op result is confusing.
     if (checked && checked.size === 0) {
       alert("Select at least one section to export.")
-      btn.textContent = orig
+      btn.innerHTML = orig
       btn.removeAttribute("disabled")
       return
     }
@@ -1310,7 +1314,7 @@ document.addEventListener("nav", () => {
       else if (fmt === "json") await exportJson(checked)
       else if (fmt === "zip") await exportZip(checked)
     } finally {
-      btn.textContent = orig
+      btn.innerHTML = orig
       btn.removeAttribute("disabled")
       close()
     }
