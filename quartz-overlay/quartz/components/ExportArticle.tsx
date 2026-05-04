@@ -120,20 +120,35 @@ document.addEventListener("nav", () => {
   // emitter as <slug>.md) rather than reading the rendered DOM: the parsed
   // HTML has already lost the original code fences, and round-tripping
   // HTML -> markdown is lossy (tables, callouts, math).
+  //
+  // Images in the source are inlined as base64 \`data:\` URIs before the
+  // markdown reaches \`mdToNotebook\`. Jupyter renders data URIs in markdown
+  // cells, so the resulting .ipynb is self-contained — no sibling
+  // \`images/\` folder required. This matches what \`exportMarkdownInline\`
+  // does for standalone .md and uses the same shared
+  // \`resolveMdImageTargets\` / \`rewriteMdImages\` plumbing.
   async function exportIpynb(checked) {
-    const slug = root.getAttribute("data-slug")
-    if (!slug) return
-    const titleEl = document.querySelector(".center h1, .center .article-title")
-    const titleText = (titleEl && titleEl.textContent) || document.title || "page"
+    const rawMd = await fetchSourceMd()
+    if (rawMd == null) return
+    const titleText = getTitleText()
+    // Strip frontmatter before image resolution so a cover-image field
+    // like \`cover: ![[banner.png]]\` doesn't get counted as a source ref
+    // (the DOM doesn't render frontmatter, so the count would mismatch
+    // and the fallback would skip image inlining entirely).
+    // \`mdToNotebook\` strips frontmatter again internally — that's idempotent.
+    let md = filterMarkdownByHeadings(stripFrontmatter(rawMd), checked)
 
-    const mdUrl = "/" + slug + ".md"
-    const res = await fetch(mdUrl)
-    if (!res.ok) {
-      alert("Could not load markdown source for this page (" + res.status + ").")
-      return
+    // Pair source image refs with rendered <img> URLs and inline as data
+    // URIs. \`resolveMdImageTargets\` returns null if there are no images at
+    // all or the source-vs-DOM counts disagree; in either case we fall
+    // through with the unmodified markdown rather than risk pairing refs
+    // with the wrong assets.
+    const targets = await resolveMdImageTargets(md, checked, "data")
+    if (targets) {
+      const rewritten = rewriteMdImages(md, targets.refs, targets.targets)
+      if (rewritten != null) md = rewritten
     }
-    const rawMd = await res.text()
-    const md = filterMarkdownByHeadings(rawMd, checked)
+
     const notebook = mdToNotebook(md, titleText)
     const json = JSON.stringify(notebook, null, 1)
     triggerDownload(new Blob([json], { type: "application/x-ipynb+json" }), titleText, "ipynb")
