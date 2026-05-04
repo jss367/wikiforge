@@ -148,11 +148,18 @@ run_quartz() {
     started_at=$SECONDS
     node ./quartz/bootstrap-cli.mjs build --serve --port "$port" -d "$content_dir" &
     pid=$!
-    # `wait` returns the child's exit status, but `set -e` would abort the
-    # whole script on any non-zero. `|| rc=$?` captures the status without
-    # tripping the errexit guard.
     rc=0
-    wait "$pid" || rc=$?
+    # macOS bash 3.2 blocks trap handlers while `wait <pid>` is in flight if
+    # the child ignores the trapped signal. Quartz swallows SIGINT, so a
+    # direct `wait "$pid"` deadlocks Ctrl+C — the trap below never gets a
+    # chance to run kill_subtree. Poll with `sleep` (which IS interruptible
+    # by traps on bash 3.2) and collect the exit status afterwards with a
+    # non-blocking wait. `|| rc=$?` keeps `set -e` from aborting on the
+    # non-zero exit of a killed child.
+    while kill -0 "$pid" 2>/dev/null && [ "$quit" -eq 0 ]; do
+      sleep 1 || break
+    done
+    wait "$pid" 2>/dev/null || rc=$?
     if [ "$quit" -eq 1 ]; then
       exit 130
     fi
