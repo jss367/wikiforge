@@ -340,7 +340,14 @@ document.addEventListener("nav", () => {
   function findMdImageRefs(md) {
     const refs = []
     let inFence = false, fenceChar = "", fenceLen = 0
-    const re = /!\\[\\[([^\\]|\\r\\n]+)(?:\\|([^\\]\\r\\n]+))?\\]\\]|!\\[([^\\]\\r\\n]*)\\]\\(\\s*<?([^\\s>)]+)>?(?:\\s+"[^"]*")?\\s*\\)|<img\\b[^>]*\\bsrc\\s*=\\s*["']([^"']+)["'][^>]*>/g
+    // CommonMark allows unbracketed image URLs to contain *balanced* parens
+    // (e.g. \`![cap](Screenshot (1).png)\` — common when Obsidian users paste
+    // copy-suffixed filenames as standard markdown). \`[^\\s>)]+\` matched
+    // only up to the first \`)\` and rewriteMdImages would then splice the
+    // truncated slice, leaving \`.png)\` as garbage. We accept one level of
+    // balanced parens, plus the angle-bracketed form \`<...>\` for URLs that
+    // contain spaces or deeper nesting.
+    const re = /!\\[\\[([^\\]|\\r\\n]+)(?:\\|([^\\]\\r\\n]+))?\\]\\]|!\\[([^\\]\\r\\n]*)\\]\\(\\s*(?:<[^>\\r\\n]*>|[^\\s()<>]+(?:\\([^\\s()<>]*\\)[^\\s()<>]*)*)\\s*(?:"[^"]*")?\\s*\\)|<img\\b[^>]*\\bsrc\\s*=\\s*["']([^"']+)["'][^>]*>/g
     // Walk md preserving each line's terminator so character offsets stay
     // correct under CRLF as well as LF. The split-on-/\\r?\\n/ form would
     // collapse \\r\\n to a single advance, drifting offsets on Windows-
