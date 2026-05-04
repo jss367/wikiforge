@@ -1,4 +1,5 @@
 import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
+import style from "./styles/exportArticle.scss"
 
 // Inline client script. Quartz bundles each component's `afterDOMLoaded`
 // string and runs it after every SPA navigation, so we re-bind on each
@@ -1049,17 +1050,16 @@ document.addEventListener("nav", () => {
       if (h.level === 2) lastH2 = idx
       // Only indent h3s when they actually nest under an h2. On a doc
       // that uses h3 as its top level (no h2s), indenting orphans would
-      // be misleading.
+      // be misleading — drop the .is-h3 indent class for those.
       const isOrphanH3 = h.level === 3 && lastH2 === -1
-      const isSub = h.level === 3 && !isOrphanH3
       const row = document.createElement("label")
-      row.className = "export-section-row" + (isSub ? " is-sub" : "")
+      row.className = "export-section-row" + (h.level === 3 && !isOrphanH3 ? " is-h3" : "")
       const cb = document.createElement("input")
       cb.type = "checkbox"
       cb.checked = true
       cb.dataset.idx = String(idx)
       cb.dataset.level = String(h.level)
-      if (isSub) cb.dataset.parent = String(lastH2)
+      if (h.level === 3 && !isOrphanH3) cb.dataset.parent = String(lastH2)
       row.appendChild(cb)
       const span = document.createElement("span")
       span.textContent = h.text
@@ -1288,7 +1288,7 @@ document.addEventListener("nav", () => {
   // ----- menu wiring --------------------------------------------------------
   async function runFormat(fmt, btn) {
     btn.setAttribute("disabled", "true")
-    // Save innerHTML, not textContent: the format tiles contain nested
+    // Save innerHTML, not textContent: format tiles contain nested
     // <span>s for the name/extension lines, and a textContent round-trip
     // would collapse them into a single text node — permanently flattening
     // the styling on the first export.
@@ -1345,27 +1345,26 @@ const ExportArticle: QuartzComponent = ({ fileData }: QuartzComponentProps) => {
 
   // <details>/<summary> gives us native click-toggle and keyboard support
   // (Enter/Space on the summary). data-router-ignore stops Quartz's SPA
-  // router from intercepting clicks inside this widget.
-  //
-  // The inline <style> keeps the widget self-contained (no separate
-  // stylesheet to wire up) and the rules are scoped under .export-article
-  // so they can't leak. The script also sets sectionsEl.style.display
-  // imperatively to "" or "none"; that interplay relies on the rules
-  // here providing the *default* display when the inline style is empty.
+  // router from intercepting clicks inside this widget. All styling lives
+  // in styles/exportArticle.scss.
   return (
-    <details
-      class="export-article"
-      data-slug={fileData.slug}
-      data-router-ignore="true"
-    >
-      <style>{exportMenuStyles}</style>
+    <details class="export-article" data-slug={fileData.slug} data-router-ignore="true">
       <summary
         class="export-article-btn"
         role="button"
         aria-label="Export this page"
         title="Export this page"
       >
-        ⤓
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M12 4v12" />
+          <path d="m6 12 6 6 6-6" />
+          <path d="M5 21h14" />
+        </svg>
       </summary>
       <div class="export-menu" role="menu">
         <div class="export-sections" data-router-ignore="true" style="display: none;"></div>
@@ -1411,151 +1410,7 @@ const ExportArticle: QuartzComponent = ({ fileData }: QuartzComponentProps) => {
   )
 }
 
-const exportMenuStyles = `
-.export-article {
-  float: right;
-  margin: 0;
-  font-size: 1.1em;
-  line-height: 1;
-  position: relative;
-}
-.export-article > summary { list-style: none; }
-.export-article > summary::-webkit-details-marker { display: none; }
-.export-article > summary::marker { content: ""; }
-.export-article-btn {
-  cursor: pointer;
-  color: var(--secondary);
-  padding: 0.25em 0.4em;
-  border-radius: 4px;
-  transition: background 0.15s ease;
-}
-.export-article-btn:hover,
-.export-article[open] > .export-article-btn {
-  background: var(--lightgray);
-}
-
-.export-menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  display: flex;
-  background: var(--light);
-  border: 1px solid var(--lightgray);
-  border-radius: 8px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
-  z-index: 5;
-  font-size: 0.85rem;
-  overflow: hidden;
-}
-
-.export-menu .export-sections {
-  flex-direction: column;
-  width: 16em;
-  padding: 0.7em 0;
-  border-right: 1px solid var(--lightgray);
-}
-
-.export-col-title {
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--gray);
-  padding: 0 0.9em;
-  margin: 0 0 0.4em;
-}
-
-.export-section-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
-  padding: 0.3em 0.9em;
-  cursor: pointer;
-  color: var(--dark);
-  transition: background 0.1s ease;
-}
-.export-section-row:hover { background: var(--lightgray); }
-.export-section-row input[type="checkbox"] {
-  margin: 0;
-  flex-shrink: 0;
-}
-.export-section-row > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.export-section-row.is-sub {
-  padding-left: 1.8em;
-}
-.export-section-row.is-sub > span { color: var(--gray); }
-.export-section-all {
-  font-weight: 600;
-  border-bottom: 1px solid var(--lightgray);
-  padding-bottom: 0.45em;
-  margin-bottom: 0.3em;
-}
-.export-section-list {
-  max-height: 30vh;
-  overflow-y: auto;
-}
-
-.export-formats {
-  padding: 0.7em 0.7em 0.8em;
-  width: 18em;
-}
-.export-formats-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.2em;
-}
-.export-formats button {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.1em;
-  padding: 0.45em 0.65em;
-  background: none;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  color: var(--dark);
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-  transition: background 0.1s ease, border-color 0.1s ease;
-}
-.export-formats button:hover {
-  background: var(--lightgray);
-  border-color: var(--lightgray);
-}
-.export-formats button:focus-visible {
-  outline: 2px solid var(--secondary);
-  outline-offset: -1px;
-}
-.export-fmt-name {
-  font-weight: 500;
-  font-size: 0.875rem;
-  line-height: 1.2;
-}
-.export-fmt-ext {
-  font-size: 0.7rem;
-  color: var(--gray);
-  font-family: var(--codeFont, ui-monospace, "SFMono-Regular", Menlo, monospace);
-}
-
-@media (max-width: 560px) {
-  .export-menu {
-    flex-direction: column;
-    max-width: calc(100vw - 1em);
-  }
-  .export-menu .export-sections {
-    width: auto;
-    border-right: none;
-    border-bottom: 1px solid var(--lightgray);
-  }
-  .export-formats { width: auto; }
-}
-`
-
 ExportArticle.afterDOMLoaded = exportScript
+ExportArticle.css = style
 
 export default (() => ExportArticle) satisfies QuartzComponentConstructor
