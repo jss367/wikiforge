@@ -131,7 +131,12 @@ document.addEventListener("nav", () => {
     const rawMd = await fetchSourceMd()
     if (rawMd == null) return
     const titleText = getTitleText()
-    let md = filterMarkdownByHeadings(rawMd, checked)
+    // Strip frontmatter before image resolution so a cover-image field
+    // like \`cover: ![[banner.png]]\` doesn't get counted as a source ref
+    // (the DOM doesn't render frontmatter, so the count would mismatch
+    // and the fallback would skip image inlining entirely).
+    // \`mdToNotebook\` strips frontmatter again internally — that's idempotent.
+    let md = filterMarkdownByHeadings(stripFrontmatter(rawMd), checked)
 
     // Pair source image refs with rendered <img> URLs and inline as data
     // URIs. \`resolveMdImageTargets\` returns null if there are no images at
