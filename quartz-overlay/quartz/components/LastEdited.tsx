@@ -24,10 +24,7 @@ export default (() => {
     })
 
     return (
-      <p
-        class="last-edited"
-        style="margin-top: 2em; padding-top: 0.5em; border-top: 1px solid var(--lightgray); font-size: 0.8em; color: var(--gray);"
-      >
+      <p class="page-meta last-edited">
         This page was last edited on {formatted}, at {time} (UTC).
       </p>
     )
