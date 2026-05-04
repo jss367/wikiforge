@@ -1024,6 +1024,11 @@ document.addEventListener("nav", () => {
     }
     sectionsEl.style.display = ""
 
+    const title = document.createElement("div")
+    title.className = "export-col-title"
+    title.textContent = "Include sections"
+    sectionsEl.appendChild(title)
+
     const header = document.createElement("label")
     header.className = "export-section-row export-section-all"
     const allCb = document.createElement("input")
@@ -1283,7 +1288,11 @@ document.addEventListener("nav", () => {
   // ----- menu wiring --------------------------------------------------------
   async function runFormat(fmt, btn) {
     btn.setAttribute("disabled", "true")
-    const orig = btn.textContent
+    // Save innerHTML, not textContent: format tiles contain nested
+    // <span>s for the name/extension lines, and a textContent round-trip
+    // would collapse them into a single text node — permanently flattening
+    // the styling on the first export.
+    const orig = btn.innerHTML
     btn.textContent = "Exporting…"
     const checked = getCheckedIndices()
     // Bail early on an explicit empty selection — exporting a notebook
@@ -1291,7 +1300,7 @@ document.addEventListener("nav", () => {
     // a misclick, and the silent-no-op result is confusing.
     if (checked && checked.size === 0) {
       alert("Select at least one section to export.")
-      btn.textContent = orig
+      btn.innerHTML = orig
       btn.removeAttribute("disabled")
       return
     }
@@ -1305,7 +1314,7 @@ document.addEventListener("nav", () => {
       else if (fmt === "json") await exportJson(checked)
       else if (fmt === "zip") await exportZip(checked)
     } finally {
-      btn.textContent = orig
+      btn.innerHTML = orig
       btn.removeAttribute("disabled")
       close()
     }
@@ -1360,30 +1369,41 @@ const ExportArticle: QuartzComponent = ({ fileData }: QuartzComponentProps) => {
       <div class="export-menu" role="menu">
         <div class="export-sections" data-router-ignore="true" style="display: none;"></div>
         <div class="export-formats">
-          <button type="button" role="menuitem" data-fmt="html" data-router-ignore="true">
-            HTML
-          </button>
-          <button type="button" role="menuitem" data-fmt="pdf" data-router-ignore="true">
-            PDF
-          </button>
-          <button type="button" role="menuitem" data-fmt="md" data-router-ignore="true">
-            Markdown
-          </button>
-          <button type="button" role="menuitem" data-fmt="txt" data-router-ignore="true">
-            Plain text
-          </button>
-          <button type="button" role="menuitem" data-fmt="ipynb" data-router-ignore="true">
-            Jupyter Notebook
-          </button>
-          <button type="button" role="menuitem" data-fmt="tex" data-router-ignore="true">
-            LaTeX
-          </button>
-          <button type="button" role="menuitem" data-fmt="json" data-router-ignore="true">
-            JSON
-          </button>
-          <button type="button" role="menuitem" data-fmt="zip" data-router-ignore="true">
-            ZIP (HTML + assets)
-          </button>
+          <div class="export-col-title">Download as</div>
+          <div class="export-formats-grid">
+            <button type="button" role="menuitem" data-fmt="html" data-router-ignore="true">
+              <span class="export-fmt-name">HTML</span>
+              <span class="export-fmt-ext">.html</span>
+            </button>
+            <button type="button" role="menuitem" data-fmt="pdf" data-router-ignore="true">
+              <span class="export-fmt-name">PDF</span>
+              <span class="export-fmt-ext">.pdf</span>
+            </button>
+            <button type="button" role="menuitem" data-fmt="md" data-router-ignore="true">
+              <span class="export-fmt-name">Markdown</span>
+              <span class="export-fmt-ext">.md</span>
+            </button>
+            <button type="button" role="menuitem" data-fmt="txt" data-router-ignore="true">
+              <span class="export-fmt-name">Plain text</span>
+              <span class="export-fmt-ext">.txt</span>
+            </button>
+            <button type="button" role="menuitem" data-fmt="ipynb" data-router-ignore="true">
+              <span class="export-fmt-name">Jupyter</span>
+              <span class="export-fmt-ext">.ipynb</span>
+            </button>
+            <button type="button" role="menuitem" data-fmt="tex" data-router-ignore="true">
+              <span class="export-fmt-name">LaTeX</span>
+              <span class="export-fmt-ext">.tex</span>
+            </button>
+            <button type="button" role="menuitem" data-fmt="json" data-router-ignore="true">
+              <span class="export-fmt-name">JSON</span>
+              <span class="export-fmt-ext">.json</span>
+            </button>
+            <button type="button" role="menuitem" data-fmt="zip" data-router-ignore="true">
+              <span class="export-fmt-name">ZIP archive</span>
+              <span class="export-fmt-ext">.zip</span>
+            </button>
+          </div>
         </div>
       </div>
     </details>
