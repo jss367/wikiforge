@@ -121,13 +121,19 @@ document.addEventListener("nav", () => {
   // HTML has already lost the original code fences, and round-tripping
   // HTML -> markdown is lossy (tables, callouts, math).
   //
-  // Images are embedded using Jupyter's native cell-attachment scheme
-  // (\`![](attachment:NAME)\` resolved against the cell's \`attachments\`
-  // dict) rather than \`data:\` URIs. Both forms keep the .ipynb single-
-  // file, but GitHub's notebook renderer and ReviewNB strip \`data:\` image
-  // sources under their content-security policy and show the URI as raw
-  // text — attachments render correctly in those targets and everywhere
-  // data URIs do (JupyterLab, classic Jupyter, VS Code, nbviewer, Colab).
+  // Images are embedded as **code-cell display_data outputs**, not as
+  // markdown-cell content. We tried two markdown-cell paths first:
+  //   - \`data:\` URIs in markdown cells — stripped by GitHub's notebook
+  //     renderer and ReviewNB (CSP excludes \`data:\` image sources).
+  //   - \`attachment:NAME\` refs against cell.attachments — supported by
+  //     JupyterLab/VS Code, but ReviewNB (despite their 2022 fix) was
+  //     still showing the raw markdown text instead of rendering the
+  //     image for our exports.
+  // Code-cell outputs are the canonical "ran-the-notebook" image path:
+  // every renderer that handles executed notebooks renders them. We
+  // produce a synthetic \`display_data\` output per source image and split
+  // the surrounding prose into markdown cells around each image. The
+  // resulting .ipynb looks like one that was executed end-to-end.
   async function exportIpynb(checked) {
     const rawMd = await fetchSourceMd()
     if (rawMd == null) return
@@ -137,57 +143,97 @@ document.addEventListener("nav", () => {
     // (the DOM doesn't render frontmatter, so the count would mismatch
     // and the fallback would skip image inlining entirely).
     // \`mdToNotebook\` strips frontmatter again internally — that's idempotent.
-    let md = filterMarkdownByHeadings(stripFrontmatter(rawMd), checked)
+    const md = filterMarkdownByHeadings(stripFrontmatter(rawMd), checked)
 
-    // Pair source image refs with rendered <img> URLs and rewrite them to
-    // \`attachment:NAME\`. \`resolveMdImageTargets\` returns null if there are
-    // no images at all or the source-vs-DOM counts disagree; in either
-    // case we fall through with the unmodified markdown rather than risk
-    // pairing refs with the wrong assets.
-    let attachments = []
-    const targets = await resolveMdImageTargets(md, checked, "attachment")
-    if (targets) {
-      const rewritten = rewriteMdImages(md, targets.refs, targets.targets)
-      if (rewritten != null) {
-        md = rewritten
-        attachments = targets.entries
-      }
-    }
+    // Pair source image refs with rendered <img> URLs and resolve to
+    // base64 + mime. \`resolveMdImageTargets\` returns null if there are no
+    // images at all or the source-vs-DOM counts disagree; in either case
+    // \`mdToNotebook\` ships the unmodified markdown.
+    const resolved = await resolveMdImageTargets(md, checked, "raw")
 
     const notebook = mdToNotebook(md, titleText)
-    if (attachments.length > 0) attachImagesToCells(notebook.cells, attachments)
+    if (resolved && resolved.imageData.length > 0) {
+      notebook.cells = splitImagesIntoCodeCells(notebook.cells, resolved.imageData)
+    }
+
     const json = JSON.stringify(notebook, null, 1)
     triggerDownload(new Blob([json], { type: "application/x-ipynb+json" }), titleText, "ipynb")
   }
 
-  // For each markdown cell, scan the rewritten source for
-  // \`attachment:NAME\` references and populate \`cell.attachments\` with
-  // only those names. Keeping the dicts narrow (rather than dumping all
-  // attachments onto the first cell) matches what tools like JupyterLab
-  // produce and avoids surprising renderers that look up names in the
-  // cell's own dict.
+  // Walk the cells emitted by \`mdToNotebook\` and replace each markdown
+  // image reference with a synthetic code cell carrying the image as a
+  // \`display_data\` output. \`imageData\` is a per-ref parallel array (in
+  // document order); we walk it forward as we encounter image refs in
+  // each markdown cell, since cells were emitted in document order too.
   //
-  // The same image referenced from two cells gets duplicated into both
-  // attachment dicts — wasteful in bytes but the only correct shape: the
-  // nbformat spec scopes attachments per-cell, so a renderer reading
-  // cell B won't look at cell A's attachments to resolve \`attachment:foo\`.
-  function attachImagesToCells(cells, attachments) {
-    const byName = new Map(attachments.map((a) => [a.name, a]))
-    const refRe = /attachment:([^\\s)\\]]+)/g
+  // Cross-origin / failed-fetch images keep their \`![](url)\` form in
+  // the surrounding markdown cell — they'll resolve from the network
+  // when the .ipynb is opened against a connected viewer, same as the
+  // markdown bundlers' fallback.
+  function splitImagesIntoCodeCells(cells, imageData) {
+    const out = []
+    let dataIdx = 0
     for (const cell of cells) {
-      if (cell.cell_type !== "markdown") continue
-      const source = cell.source.join("")
-      refRe.lastIndex = 0
-      const refs = new Set()
-      let m
-      while ((m = refRe.exec(source)) !== null) refs.add(m[1])
-      if (refs.size === 0) continue
-      cell.attachments = {}
-      for (const name of refs) {
-        const a = byName.get(name)
-        if (!a) continue
-        cell.attachments[name] = { [a.mime]: a.base64 }
+      if (cell.cell_type !== "markdown") {
+        out.push(cell)
+        continue
       }
+      const source = cell.source.join("")
+      const refs = findMdImageRefs(source)
+      if (refs.length === 0) {
+        out.push(cell)
+        continue
+      }
+      let cursor = 0
+      for (const ref of refs) {
+        const before = source.slice(cursor, ref.start)
+        // Whitespace-only chunks would render as empty markdown cells,
+        // which most viewers display as a thin gap. Trim and skip.
+        if (before.trim()) {
+          out.push(makeMarkdownCell(before.replace(/^\\n+|\\n+$/g, "")))
+        }
+        const data = imageData[dataIdx++]
+        if (data && data.embedded) {
+          out.push(makeImageCodeCell(data.mime, data.base64))
+        } else {
+          // Cross-origin / failed fetch: keep the original ref in a
+          // standalone markdown cell rather than dropping it. The
+          // rendered notebook will load it from the network.
+          out.push(makeMarkdownCell(source.slice(ref.start, ref.end)))
+        }
+        cursor = ref.end
+      }
+      const after = source.slice(cursor)
+      if (after.trim()) {
+        out.push(makeMarkdownCell(after.replace(/^\\n+|\\n+$/g, "")))
+      }
+    }
+    return out
+  }
+
+  function makeMarkdownCell(text) {
+    return { cell_type: "markdown", id: makeCellId(), metadata: {}, source: lineify(text) }
+  }
+
+  // Synthetic image-bearing code cell. \`source_hidden\` keeps the empty
+  // input area collapsed in JupyterLab so the cell visually reads as
+  // "image only"; renderers that don't honour it (ReviewNB, GitHub diff)
+  // simply show an empty input region above the image, which still
+  // renders the image correctly. \`execution_count: null\` marks the cell
+  // as not-yet-run, which is the closest truthful state for a cell whose
+  // output we baked rather than executed.
+  function makeImageCodeCell(mime, base64) {
+    return {
+      cell_type: "code",
+      id: makeCellId(),
+      metadata: { jupyter: { source_hidden: true } },
+      execution_count: null,
+      source: [],
+      outputs: [{
+        output_type: "display_data",
+        data: { [mime]: base64 },
+        metadata: {},
+      }],
     }
   }
 
@@ -314,32 +360,53 @@ document.addEventListener("nav", () => {
 
     const usedNames = new Set()
     const entries = []
+    // For the Jupyter "raw" mode we return a per-ref parallel array
+    // (\`imageData[i]\` pairs with \`refs[i]\`) carrying the embedded base64
+    // and mime type, or the absolute URL for cross-origin / failed
+    // fetches. The notebook exporter splits prose at each ref and emits a
+    // synthetic code cell with that data as a \`display_data\` output.
+    const imageData = []
     const targets = urls.map((u, i) => {
-      if (!u) return null
+      if (!u) {
+        imageData.push(null)
+        return null
+      }
       const buf = buffers[i]
-      if (!buf) return u.href
+      if (!buf) {
+        imageData.push({ embedded: false, url: u.href })
+        return u.href
+      }
       if (mode === "local") {
         const local = pickLocalName(u.href, usedNames)
         entries.push({ name: local, data: new Uint8Array(buf) })
+        imageData.push(null) // unused for this mode
         return local
       }
-      if (mode === "attachment") {
-        // Jupyter cell-attachment scheme: \`![](attachment:NAME)\` resolves
-        // against the cell's \`attachments\` dict, written by the caller
-        // after \`mdToNotebook\` slices the source into cells. Strip the
-        // \`images/\` prefix that pickLocalName adds — attachment keys live
-        // in a flat per-cell namespace.
-        const name = pickLocalName(u.href, usedNames).replace(/^images\\//, "")
+      if (mode === "raw") {
         const mime = mimeFromName(u.pathname)
-        entries.push({ name, mime, base64: bytesToBase64(new Uint8Array(buf)) })
-        return "attachment:" + name
+        imageData.push({ embedded: true, mime, base64: bytesToBase64(new Uint8Array(buf)) })
+        return null // raw mode doesn't rewrite the source — targets unused
       }
       // mode === "data"
       const mime = mimeFromName(u.pathname)
+      imageData.push(null) // unused for this mode
       return "data:" + mime + ";base64," + bytesToBase64(new Uint8Array(buf))
     })
 
-    return { refs, targets, entries }
+    return { refs, targets, entries, imageData }
+  }
+
+  // nbformat 4.5 requires every cell to have an \`id\` field (string of
+  // 1–64 chars from [a-zA-Z0-9_-], unique within the notebook). JupyterLab
+  // auto-fills IDs on load/save, but stricter consumers (nbformat schema
+  // validators, GitHub's notebook diff, ReviewNB's renderer) treat a 4.5
+  // notebook with missing IDs as out-of-spec and degrade rendering. 12
+  // alphanumeric chars from Math.random — collision-free at notebook scale.
+  function makeCellId() {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    let id = ""
+    for (let i = 0; i < 12; i++) id += chars[Math.floor(Math.random() * chars.length)]
+    return id
   }
 
   // ----- shared image-bundling helpers -------------------------------------
@@ -1251,20 +1318,6 @@ document.addEventListener("nav", () => {
     let best = 0
     for (const k in counts) {
       if (counts[k] > best) { best = counts[k]; kernelLang = k }
-    }
-
-    // nbformat 4.5 requires every cell to have an \`id\` field (string of
-    // 1–64 chars from [a-zA-Z0-9_-], unique within the notebook). JupyterLab
-    // auto-fills IDs on load/save, but stricter consumers (nbformat schema
-    // validators, ReviewNB's renderer) treat a 4.5 notebook with missing
-    // IDs as out-of-spec and fall into a degraded rendering path — most
-    // notably skipping cell-attachment image rendering. Math.random across
-    // 12 alphanumeric chars is collision-free at notebook scale.
-    const idChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-    const makeCellId = () => {
-      let id = ""
-      for (let i = 0; i < 12; i++) id += idChars[Math.floor(Math.random() * idChars.length)]
-      return id
     }
 
     const cells = []
