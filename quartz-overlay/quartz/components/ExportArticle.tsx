@@ -216,6 +216,90 @@ document.addEventListener("nav", () => {
     triggerDownload(buildZip(entries), titleText, "zip")
   }
 
+  // ----- Jupyter Notebook export (force every image into its own code cell) -
+  // Empirical finding: ReviewNB does not render image refs in markdown
+  // cells — not relative paths, not data URIs, not cell.attachments. The
+  // only image-rendering path it honours reliably is \`cell.outputs[]\`
+  // \`display_data\` entries on code cells (the canonical "ran-the-notebook"
+  // form). The single-file Jupyter tile uses code-cell outputs only for
+  // block-level images and falls back to inline \`data:\` URIs for images
+  // sitting inside tables / lists / blockquotes — which means table-cell
+  // images don't render in ReviewNB.
+  //
+  // This tile trades markdown structure for image-rendering coverage:
+  // every image becomes a code cell with a \`display_data\` output, even
+  // ones that were inline in a block construct. The surrounding table /
+  // list will fragment around the extracted image (the markdown cells
+  // that wrap each image become independent), but every image renders.
+  // For PR review in ReviewNB this is the right trade.
+  async function exportIpynbForReview(checked) {
+    const rawMd = await fetchSourceMd()
+    if (rawMd == null) return
+    const titleText = getTitleText()
+    const md = filterMarkdownByHeadings(stripFrontmatter(rawMd), checked)
+
+    const resolved = await resolveMdImageTargets(md, checked, "raw")
+
+    const notebook = mdToNotebook(md, titleText)
+    if (resolved && resolved.imageData.length > 0) {
+      notebook.cells = splitAllImagesIntoCodeCells(notebook.cells, resolved.imageData)
+    }
+
+    const json = JSON.stringify(notebook, null, 1)
+    triggerDownload(new Blob([json], { type: "application/x-ipynb+json" }), titleText, "ipynb")
+  }
+
+  // Aggressive variant of \`splitImagesIntoCodeCells\`: every image — block
+  // or inline — gets split into its own \`display_data\` code cell. The
+  // surrounding markdown gets fragmented around the extraction (e.g. a
+  // single table row \`| 20000 | ![](x.png) |\` becomes a markdown cell
+  // with \`| 20000 | \`, a code cell with the image, and a markdown cell
+  // with \` |\`). That fragmentation is intentional: rendering every image
+  // is the whole point of this variant, and ReviewNB only renders code-
+  // cell outputs.
+  function splitAllImagesIntoCodeCells(cells, imageData) {
+    const out = []
+    let dataIdx = 0
+    for (const cell of cells) {
+      if (cell.cell_type !== "markdown") {
+        out.push(cell)
+        continue
+      }
+      const source = cell.source.join("")
+      const refs = findMdImageRefs(source)
+      if (refs.length === 0) {
+        out.push(cell)
+        continue
+      }
+      let cursor = 0
+      for (const ref of refs) {
+        const data = imageData[dataIdx++]
+        const before = source.slice(cursor, ref.start)
+        if (before.trim()) {
+          out.push(makeMarkdownCell(before.replace(/^\\n+|\\n+$/g, "")))
+        }
+        if (data && data.embedded) {
+          out.push(makeImageCodeCell(data.mime, data.base64))
+        } else if (data && data.url) {
+          // Cross-origin / failed fetch: no bytes to put in a code-cell
+          // output. Emit a standalone markdown cell with normalized
+          // CommonMark syntax — the same fallback the block-level branch
+          // of splitImagesIntoCodeCells uses. Won't render in ReviewNB
+          // but will resolve from the network elsewhere.
+          out.push(makeMarkdownCell("![" + escapeMdAlt(ref.alt) + "](" + data.url + ")"))
+        } else {
+          out.push(makeMarkdownCell(source.slice(ref.start, ref.end)))
+        }
+        cursor = ref.end
+      }
+      const after = source.slice(cursor)
+      if (after.trim()) {
+        out.push(makeMarkdownCell(after.replace(/^\\n+|\\n+$/g, "")))
+      }
+    }
+    return out
+  }
+
   // Walk the cells emitted by \`mdToNotebook\` and replace each markdown
   // image reference with a synthetic code cell carrying the image as a
   // \`display_data\` output. \`imageData\` is a per-ref parallel array (in
@@ -1784,6 +1868,7 @@ document.addEventListener("nav", () => {
       else if (fmt === "txt") await exportText(checked)
       else if (fmt === "ipynb") await exportIpynb(checked)
       else if (fmt === "ipynb-zip") await exportIpynbZip(checked)
+      else if (fmt === "ipynb-review") await exportIpynbForReview(checked)
       else if (fmt === "tex") await exportLatex(checked)
       else if (fmt === "json") await exportJson(checked)
       else if (fmt === "zip") await exportZip(checked)
@@ -1892,10 +1977,20 @@ const ExportArticle: QuartzComponent = ({ fileData }: QuartzComponentProps) => {
               role="menuitem"
               data-fmt="ipynb-zip"
               data-router-ignore="true"
-              title="Notebook + images/ folder bundled as a zip — for committing to a GitHub PR (renders in ReviewNB and GitHub diff)"
+              title="Notebook + images/ folder bundled as a zip — sibling-folder image refs render in JupyterLab and GitHub-native blob view"
             >
               <span class="export-fmt-name">Jupyter (zip)</span>
               <span class="export-fmt-ext">.zip</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-fmt="ipynb-review"
+              data-router-ignore="true"
+              title="Single .ipynb where every image — including ones inside tables/lists — is a code-cell display_data output. Surrounding markdown structure fragments around each image, but every image renders in ReviewNB."
+            >
+              <span class="export-fmt-name">Jupyter (ReviewNB)</span>
+              <span class="export-fmt-ext">.ipynb</span>
             </button>
             <button type="button" role="menuitem" data-fmt="tex" data-router-ignore="true">
               <span class="export-fmt-name">LaTeX</span>
