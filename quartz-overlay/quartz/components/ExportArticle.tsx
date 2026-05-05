@@ -1253,18 +1253,33 @@ document.addEventListener("nav", () => {
       if (counts[k] > best) { best = counts[k]; kernelLang = k }
     }
 
+    // nbformat 4.5 requires every cell to have an \`id\` field (string of
+    // 1–64 chars from [a-zA-Z0-9_-], unique within the notebook). JupyterLab
+    // auto-fills IDs on load/save, but stricter consumers (nbformat schema
+    // validators, ReviewNB's renderer) treat a 4.5 notebook with missing
+    // IDs as out-of-spec and fall into a degraded rendering path — most
+    // notably skipping cell-attachment image rendering. Math.random across
+    // 12 alphanumeric chars is collision-free at notebook scale.
+    const idChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    const makeCellId = () => {
+      let id = ""
+      for (let i = 0; i < 12; i++) id += idChars[Math.floor(Math.random() * idChars.length)]
+      return id
+    }
+
     const cells = []
     for (const s of segments) {
       if (s.type === "prose") {
         const txt = s.lines.join("\\n").replace(/^\\n+|\\n+$/g, "")
         if (!txt) continue
-        cells.push({ cell_type: "markdown", metadata: {}, source: lineify(txt) })
+        cells.push({ cell_type: "markdown", id: makeCellId(), metadata: {}, source: lineify(txt) })
       } else {
         const codeLang = (s.lang || "").toLowerCase()
         const body = s.lines.join("\\n")
         if (kernelLang && codeLang === kernelLang) {
           cells.push({
             cell_type: "code",
+            id: makeCellId(),
             metadata: {},
             execution_count: null,
             outputs: [],
@@ -1274,7 +1289,7 @@ document.addEventListener("nav", () => {
           // Preserve the fence so the markdown cell still renders as a
           // code block (with its language tag, when one was given).
           const wrapped = "\`\`\`" + (s.lang || "") + "\\n" + body + "\\n\`\`\`"
-          cells.push({ cell_type: "markdown", metadata: {}, source: lineify(wrapped) })
+          cells.push({ cell_type: "markdown", id: makeCellId(), metadata: {}, source: lineify(wrapped) })
         }
       }
     }
