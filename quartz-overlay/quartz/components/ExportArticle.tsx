@@ -184,28 +184,77 @@ document.addEventListener("nav", () => {
         out.push(cell)
         continue
       }
+      // Two ref categories:
+      //   - block-level: image is the sole content of its line (preceded
+      //     and followed only by whitespace on that line). Splits the cell:
+      //     prose-before goes to a markdown cell, image becomes a code
+      //     cell with display_data output, prose-after continues.
+      //   - inline: image sits inside a list item, table row, blockquote,
+      //     paragraph, etc. Splitting would fracture the surrounding block
+      //     construct (notably table rows, which our reports use), so we
+      //     rewrite the ref in place to \`![alt](data:...)\` and keep the
+      //     line intact. Renderers that don't honour data URIs (ReviewNB,
+      //     GitHub) won't show the inline image — preserving the table is
+      //     a strictly better trade than turning one row into three cells.
       let cursor = 0
+      let pending = ""
       for (const ref of refs) {
-        const before = source.slice(cursor, ref.start)
-        // Whitespace-only chunks would render as empty markdown cells,
-        // which most viewers display as a thin gap. Trim and skip.
-        if (before.trim()) {
-          out.push(makeMarkdownCell(before.replace(/^\\n+|\\n+$/g, "")))
-        }
         const data = imageData[dataIdx++]
-        if (data && data.embedded) {
-          out.push(makeImageCodeCell(data.mime, data.base64))
+        const lineStart = source.lastIndexOf("\\n", ref.start - 1) + 1
+        const lineEndIdx = source.indexOf("\\n", ref.end)
+        const lineEnd = lineEndIdx === -1 ? source.length : lineEndIdx
+        const beforeRef = source.slice(lineStart, ref.start)
+        const afterRef = source.slice(ref.end, lineEnd)
+        const isBlock = !beforeRef.trim() && !afterRef.trim()
+
+        if (isBlock) {
+          // Flush prose accumulated up to (but not including) this ref's
+          // containing line, then emit the image cell.
+          pending += source.slice(cursor, lineStart)
+          if (pending.trim()) {
+            out.push(makeMarkdownCell(pending.replace(/^\\n+|\\n+$/g, "")))
+          }
+          pending = ""
+          if (data && data.embedded) {
+            out.push(makeImageCodeCell(data.mime, data.base64))
+          } else if (data && data.url) {
+            // Cross-origin / failed fetch on a block-level ref: emit a
+            // standalone markdown cell with normalized CommonMark syntax
+            // rather than the original wikilink/HTML form, so renderers
+            // that don't speak Obsidian wikilinks can still resolve the
+            // image from the network.
+            out.push(makeMarkdownCell("![" + escapeMdAlt(ref.alt) + "](" + data.url + ")"))
+          } else {
+            // Truly unresolvable (malformed src): preserve the original.
+            out.push(makeMarkdownCell(source.slice(ref.start, ref.end)))
+          }
+          // Skip past the ref's full line, including its trailing newline.
+          cursor = lineEnd + (lineEndIdx === -1 ? 0 : 1)
         } else {
-          // Cross-origin / failed fetch: keep the original ref in a
-          // standalone markdown cell rather than dropping it. The
-          // rendered notebook will load it from the network.
-          out.push(makeMarkdownCell(source.slice(ref.start, ref.end)))
+          // Inline ref: rewrite in place so the surrounding block stays
+          // intact. Embedded images become \`data:\` URIs (renders in
+          // JupyterLab, VS Code, nbviewer; not in ReviewNB or GitHub
+          // diff — but the alternative is breaking the table row, which
+          // is worse than a missing inline image). Cross-origin / failed
+          // fetches normalize to \`![alt](url)\`.
+          pending += source.slice(cursor, ref.start)
+          let target = null
+          if (data && data.embedded) {
+            target = "data:" + data.mime + ";base64," + data.base64
+          } else if (data && data.url) {
+            target = data.url
+          }
+          if (target != null) {
+            pending += "![" + escapeMdAlt(ref.alt) + "](" + target + ")"
+          } else {
+            pending += source.slice(ref.start, ref.end)
+          }
+          cursor = ref.end
         }
-        cursor = ref.end
       }
-      const after = source.slice(cursor)
-      if (after.trim()) {
-        out.push(makeMarkdownCell(after.replace(/^\\n+|\\n+$/g, "")))
+      pending += source.slice(cursor)
+      if (pending.trim()) {
+        out.push(makeMarkdownCell(pending.replace(/^\\n+|\\n+$/g, "")))
       }
     }
     return out
