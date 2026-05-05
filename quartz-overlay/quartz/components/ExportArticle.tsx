@@ -121,12 +121,13 @@ document.addEventListener("nav", () => {
   // HTML has already lost the original code fences, and round-tripping
   // HTML -> markdown is lossy (tables, callouts, math).
   //
-  // Images in the source are inlined as base64 \`data:\` URIs before the
-  // markdown reaches \`mdToNotebook\`. Jupyter renders data URIs in markdown
-  // cells, so the resulting .ipynb is self-contained — no sibling
-  // \`images/\` folder required. This matches what \`exportMarkdownInline\`
-  // does for standalone .md and uses the same shared
-  // \`resolveMdImageTargets\` / \`rewriteMdImages\` plumbing.
+  // Images are embedded using Jupyter's native cell-attachment scheme
+  // (\`![](attachment:NAME)\` resolved against the cell's \`attachments\`
+  // dict) rather than \`data:\` URIs. Both forms keep the .ipynb single-
+  // file, but GitHub's notebook renderer and ReviewNB strip \`data:\` image
+  // sources under their content-security policy and show the URI as raw
+  // text — attachments render correctly in those targets and everywhere
+  // data URIs do (JupyterLab, classic Jupyter, VS Code, nbviewer, Colab).
   async function exportIpynb(checked) {
     const rawMd = await fetchSourceMd()
     if (rawMd == null) return
@@ -138,20 +139,56 @@ document.addEventListener("nav", () => {
     // \`mdToNotebook\` strips frontmatter again internally — that's idempotent.
     let md = filterMarkdownByHeadings(stripFrontmatter(rawMd), checked)
 
-    // Pair source image refs with rendered <img> URLs and inline as data
-    // URIs. \`resolveMdImageTargets\` returns null if there are no images at
-    // all or the source-vs-DOM counts disagree; in either case we fall
-    // through with the unmodified markdown rather than risk pairing refs
-    // with the wrong assets.
-    const targets = await resolveMdImageTargets(md, checked, "data")
+    // Pair source image refs with rendered <img> URLs and rewrite them to
+    // \`attachment:NAME\`. \`resolveMdImageTargets\` returns null if there are
+    // no images at all or the source-vs-DOM counts disagree; in either
+    // case we fall through with the unmodified markdown rather than risk
+    // pairing refs with the wrong assets.
+    let attachments = []
+    const targets = await resolveMdImageTargets(md, checked, "attachment")
     if (targets) {
       const rewritten = rewriteMdImages(md, targets.refs, targets.targets)
-      if (rewritten != null) md = rewritten
+      if (rewritten != null) {
+        md = rewritten
+        attachments = targets.entries
+      }
     }
 
     const notebook = mdToNotebook(md, titleText)
+    if (attachments.length > 0) attachImagesToCells(notebook.cells, attachments)
     const json = JSON.stringify(notebook, null, 1)
     triggerDownload(new Blob([json], { type: "application/x-ipynb+json" }), titleText, "ipynb")
+  }
+
+  // For each markdown cell, scan the rewritten source for
+  // \`attachment:NAME\` references and populate \`cell.attachments\` with
+  // only those names. Keeping the dicts narrow (rather than dumping all
+  // attachments onto the first cell) matches what tools like JupyterLab
+  // produce and avoids surprising renderers that look up names in the
+  // cell's own dict.
+  //
+  // The same image referenced from two cells gets duplicated into both
+  // attachment dicts — wasteful in bytes but the only correct shape: the
+  // nbformat spec scopes attachments per-cell, so a renderer reading
+  // cell B won't look at cell A's attachments to resolve \`attachment:foo\`.
+  function attachImagesToCells(cells, attachments) {
+    const byName = new Map(attachments.map((a) => [a.name, a]))
+    const refRe = /attachment:([^\\s)\\]]+)/g
+    for (const cell of cells) {
+      if (cell.cell_type !== "markdown") continue
+      const source = cell.source.join("")
+      refRe.lastIndex = 0
+      const refs = new Set()
+      let m
+      while ((m = refRe.exec(source)) !== null) refs.add(m[1])
+      if (refs.size === 0) continue
+      cell.attachments = {}
+      for (const name of refs) {
+        const a = byName.get(name)
+        if (!a) continue
+        cell.attachments[name] = { [a.mime]: a.base64 }
+      }
+    }
   }
 
   // ----- shared "fetch the .md source" wrapper ------------------------------
@@ -285,6 +322,17 @@ document.addEventListener("nav", () => {
         const local = pickLocalName(u.href, usedNames)
         entries.push({ name: local, data: new Uint8Array(buf) })
         return local
+      }
+      if (mode === "attachment") {
+        // Jupyter cell-attachment scheme: \`![](attachment:NAME)\` resolves
+        // against the cell's \`attachments\` dict, written by the caller
+        // after \`mdToNotebook\` slices the source into cells. Strip the
+        // \`images/\` prefix that pickLocalName adds — attachment keys live
+        // in a flat per-cell namespace.
+        const name = pickLocalName(u.href, usedNames).replace(/^images\\//, "")
+        const mime = mimeFromName(u.pathname)
+        entries.push({ name, mime, base64: bytesToBase64(new Uint8Array(buf)) })
+        return "attachment:" + name
       }
       // mode === "data"
       const mime = mimeFromName(u.pathname)
