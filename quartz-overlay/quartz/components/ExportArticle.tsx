@@ -160,6 +160,62 @@ document.addEventListener("nav", () => {
     triggerDownload(new Blob([json], { type: "application/x-ipynb+json" }), titleText, "ipynb")
   }
 
+  // ----- Jupyter Notebook export (zip-bundled with sibling images/) ---------
+  // Sibling-folder variant for the GitHub-PR / ReviewNB review path. The
+  // .ipynb keeps standard \`![alt](images/NAME)\` markdown image refs that
+  // resolve against repo files once the user extracts the zip and commits
+  // both pieces. That side-steps every CSP / sanitizer constraint the
+  // single-file variant has to dance around: ReviewNB and GitHub diff
+  // render relative-path image refs in \`.ipynb\` markdown cells the same
+  // way they render \`.md\`, so inline images in tables/lists/blockquotes
+  // (which the single-file variant has to fall back to \`data:\` URIs for)
+  // render correctly here too.
+  //
+  // Trade-off vs the single-file Jupyter tile: not portable as a single
+  // artifact — the user must keep the .ipynb and the \`images/\` folder
+  // together. For the review-on-GitHub workflow this is the right shape;
+  // for the drop-into-a-notebook-folder workflow, the single-file tile
+  // remains the better pick.
+  async function exportIpynbZip(checked) {
+    const rawMd = await fetchSourceMd()
+    if (rawMd == null) return
+    const titleText = getTitleText()
+    const md = filterMarkdownByHeadings(stripFrontmatter(rawMd), checked)
+
+    // Reuse the Markdown-zip resolver: \`local\` mode rewrites image refs
+    // to \`images/NAME\` and returns parallel zip entries. Same fallback
+    // semantics as the markdown bundlers — count mismatch / no images
+    // ships an unmodified single .ipynb.
+    const resolved = await resolveMdImageTargets(md, checked, "local")
+    let finalMd = md
+    let imageEntries = []
+    if (resolved) {
+      const rewritten = rewriteMdImages(md, resolved.refs, resolved.targets)
+      if (rewritten != null) {
+        finalMd = rewritten
+        imageEntries = resolved.entries
+      }
+    }
+
+    const notebook = mdToNotebook(finalMd, titleText)
+    const json = JSON.stringify(notebook, null, 1)
+
+    // No images bundled (no source images, count mismatch, or every image
+    // was cross-origin/failed) → ship a plain .ipynb. A zip wrapping a
+    // single file is a worse artifact than just the file.
+    if (imageEntries.length === 0) {
+      triggerDownload(new Blob([json], { type: "application/x-ipynb+json" }), titleText, "ipynb")
+      return
+    }
+
+    const enc = new TextEncoder()
+    const entries = [
+      { name: slugify(titleText) + ".ipynb", data: enc.encode(json) },
+      ...imageEntries,
+    ]
+    triggerDownload(buildZip(entries), titleText, "zip")
+  }
+
   // Walk the cells emitted by \`mdToNotebook\` and replace each markdown
   // image reference with a synthetic code cell carrying the image as a
   // \`display_data\` output. \`imageData\` is a per-ref parallel array (in
@@ -1727,6 +1783,7 @@ document.addEventListener("nav", () => {
       else if (fmt === "md-inline") await exportMarkdownInline(checked)
       else if (fmt === "txt") await exportText(checked)
       else if (fmt === "ipynb") await exportIpynb(checked)
+      else if (fmt === "ipynb-zip") await exportIpynbZip(checked)
       else if (fmt === "tex") await exportLatex(checked)
       else if (fmt === "json") await exportJson(checked)
       else if (fmt === "zip") await exportZip(checked)
@@ -1820,9 +1877,25 @@ const ExportArticle: QuartzComponent = ({ fileData }: QuartzComponentProps) => {
               <span class="export-fmt-name">Plain text</span>
               <span class="export-fmt-ext">.txt</span>
             </button>
-            <button type="button" role="menuitem" data-fmt="ipynb" data-router-ignore="true">
+            <button
+              type="button"
+              role="menuitem"
+              data-fmt="ipynb"
+              data-router-ignore="true"
+              title="Single .ipynb with images embedded as code-cell outputs"
+            >
               <span class="export-fmt-name">Jupyter</span>
               <span class="export-fmt-ext">.ipynb</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-fmt="ipynb-zip"
+              data-router-ignore="true"
+              title="Notebook + images/ folder bundled as a zip — for committing to a GitHub PR (renders in ReviewNB and GitHub diff)"
+            >
+              <span class="export-fmt-name">Jupyter (zip)</span>
+              <span class="export-fmt-ext">.zip</span>
             </button>
             <button type="button" role="menuitem" data-fmt="tex" data-router-ignore="true">
               <span class="export-fmt-name">LaTeX</span>
