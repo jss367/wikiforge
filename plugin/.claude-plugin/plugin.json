@@ -1,7 +1,7 @@
 {
   "name": "wikiforge",
-  "version": "3.0.0",
-  "description": "Clean up Obsidian notes in place: normalize whitespace, standardize list markers, and scaffold YAML frontmatter with LLM-assisted tag suggestions. Preview every change as a diff before anything is written to disk.",
+  "version": "3.1.0",
+  "description": "Clean up Obsidian notes in place (normalize whitespace, standardize list markers, scaffold YAML frontmatter with LLM-assisted tag suggestions) and export folders of notes as polished Google Docs via Composio's Google Workspace MCP. Preview every change as a diff before anything is written to disk.",
   "author": {
     "name": "Julius"
   },
@@ -11,6 +11,8 @@
     "cleanup",
     "normalize",
     "frontmatter",
-    "personal-knowledge"
+    "personal-knowledge",
+    "google-docs",
+    "export"
   ]
 }
