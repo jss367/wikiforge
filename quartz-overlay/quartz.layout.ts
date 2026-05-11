@@ -77,7 +77,10 @@ export const defaultContentPageLayout: PageLayout = {
 // frontmatter field, the component returns null and renders nothing.
 export const defaultListPageLayout: PageLayout = {
   beforeBody: [
-    ExportArticle(),
+    // Folder/list pages get the extra "Folder (HTML)" tile: from a folder
+    // index page, "this project" maps unambiguously to "this folder +
+    // descendants." Single-note pages keep the default ExportArticle().
+    ExportArticle({ includeFolderExport: true }),
     Component.Breadcrumbs(),
     Component.ArticleTitle(),
     Component.ContentMeta(),
