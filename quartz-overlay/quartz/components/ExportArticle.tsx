@@ -1277,6 +1277,200 @@ document.addEventListener("nav", () => {
     triggerDownload(buildZip(entries), titleText, "zip")
   }
 
+  // ----- Folder/project export (multi-file HTML zip) ------------------------
+  // Bundles the current page + every descendant page (by slug prefix) into a
+  // single zip. Each page becomes a standalone .html file mirroring the
+  // site's URL structure; internal links between bundled pages are rewritten
+  // to relative paths so they work straight from \`file://\`; links to pages
+  // outside the bundle absolutize back to the live site; images are fetched
+  // once and shared from a single \`images/\` folder at the zip root.
+  //
+  // Source of truth for "which pages": the rendered explorer sidebar. Every
+  // page Quartz includes in navigation has an \`<a>\` there, so a CSS query
+  // for slug-prefixed hrefs gives us the project page set without needing
+  // a server-side manifest.
+  async function exportFolderZip() {
+    const rootSlug = root.getAttribute("data-slug") || ""
+    const explorer = document.querySelector(".explorer")
+    if (!explorer) {
+      alert("Could not find the page list — folder export needs the sidebar explorer.")
+      return
+    }
+
+    // 1. Discover pages whose slug is rootSlug or starts with rootSlug + "/".
+    const pageSlugs = new Set()
+    pageSlugs.add(rootSlug)
+    explorer.querySelectorAll("a[href]").forEach((a) => {
+      const href = a.getAttribute("href")
+      if (!href || href.startsWith("#")) return
+      let url
+      try { url = new URL(href, location.href) } catch (e) { return }
+      if (url.origin !== location.origin) return
+      const slug = url.pathname.replace(/^\\/+|\\/+$/g, "")
+      if (slug === rootSlug) { pageSlugs.add(slug); return }
+      if (rootSlug && slug.startsWith(rootSlug + "/")) { pageSlugs.add(slug); return }
+      if (!rootSlug && slug) pageSlugs.add(slug)
+    })
+
+    // Root first; then depth-first by slug depth, lexical within a depth.
+    // The order doesn't affect correctness but the zip's central directory
+    // becomes nicer to read.
+    const slugs = Array.from(pageSlugs).sort((a, b) => {
+      if (a === rootSlug) return -1
+      if (b === rootSlug) return 1
+      const da = a.split("/").length, db = b.split("/").length
+      return da - db || a.localeCompare(b)
+    })
+
+    // 2. Fetch every page's rendered HTML in parallel. Quartz serves pages
+    // at the slug path with a trailing slash; pulling the served HTML lets
+    // us reuse the live-site CSS/markup without a server-side render.
+    const fetched = await Promise.all(slugs.map(async (slug) => {
+      try {
+        const res = await fetch("/" + slug + (slug ? "/" : ""))
+        if (!res.ok) return null
+        return { slug, doc: new DOMParser().parseFromString(await res.text(), "text/html") }
+      } catch (e) { return null }
+    }))
+    const pages = fetched.filter((p) => p !== null)
+    if (pages.length === 0) {
+      alert("Could not fetch any pages for the folder export.")
+      return
+    }
+
+    // Slug → zip path. Root becomes index.html; descendants mirror their
+    // path below the root with an explicit .html extension (browsers won't
+    // auto-resolve "index.html" inside a folder when opened over file://,
+    // so we ship .html files rather than directory-style URLs).
+    function slugToZipPath(slug) {
+      if (slug === rootSlug) return "index.html"
+      const rel = rootSlug ? slug.slice(rootSlug.length + 1) : slug
+      return rel + ".html"
+    }
+    // Relative path between two zip entries treated as posix paths.
+    function relZipPath(fromPath, toPath) {
+      const fromDir = fromPath.split("/").slice(0, -1)
+      const toParts = toPath.split("/")
+      let i = 0
+      while (i < fromDir.length && i < toParts.length - 1 && fromDir[i] === toParts[i]) i++
+      const up = fromDir.slice(i).map(() => "..")
+      const out = up.concat(toParts.slice(i)).join("/")
+      return out || toParts[toParts.length - 1]
+    }
+    const slugToPath = new Map(pages.map((p) => [p.slug, slugToZipPath(p.slug)]))
+
+    // 3. CSS is the same for every page (single Quartz build), so collect
+    // it once from the current document and inline it into every standalone
+    // page in the zip.
+    const css = await collectCss()
+    const usedImageNames = new Set()
+    const imageLocalByUrl = new Map() // absolute URL → "images/foo.png"
+    const imageTaskUrls = new Set()
+
+    // 4. Per-page DOM pass: extract .center, rewrite hrefs, and record image
+    // fetch tasks. Image rewrites are deferred until fetches complete so we
+    // can fall back to absolute URLs on failures.
+    const processed = []
+    for (const page of pages) {
+      const fromPath = slugToPath.get(page.slug)
+      const center = page.doc.querySelector(".center")
+      if (!center) continue
+      // Resolve hrefs/src against the page's own URL so "../sibling/" inside
+      // \`experiments/foo/\` resolves to \`experiments/sibling/\` correctly.
+      const baseUrl = location.origin + "/" + page.slug + (page.slug ? "/" : "")
+
+      center.querySelectorAll("a[href]").forEach((a) => {
+        const v = a.getAttribute("href")
+        if (!v || v.startsWith("#") || /^[a-z][a-z0-9+.-]*:/i.test(v)) return
+        let abs
+        try { abs = new URL(v, baseUrl) } catch (e) { return }
+        const targetSlug = abs.pathname.replace(/^\\/+|\\/+$/g, "")
+        const anchor = abs.hash || ""
+        if (slugToPath.has(targetSlug)) {
+          a.setAttribute("href", relZipPath(fromPath, slugToPath.get(targetSlug)) + anchor)
+        } else {
+          // Outside the bundle: keep an absolute URL pointing at the live
+          // site so clicking through still works when the zip is opened
+          // online. Offline, the link will fail to resolve — there's no
+          // better option without including the entire site.
+          a.setAttribute("href", abs.href)
+        }
+      })
+
+      const imgTasks = []
+      center.querySelectorAll("img[src]").forEach((img) => {
+        const v = img.getAttribute("src")
+        if (!v) return
+        let url
+        try { url = new URL(v, baseUrl) } catch (e) { return }
+        if (url.origin !== location.origin) {
+          img.setAttribute("src", url.href)
+          return
+        }
+        const abs = url.href
+        if (!imageLocalByUrl.has(abs)) {
+          imageLocalByUrl.set(abs, pickLocalName(abs, usedImageNames))
+          imageTaskUrls.add(abs)
+        }
+        imgTasks.push({ img, abs })
+      })
+      // Strip srcset for the same reason exportZip does — multiplying fetches
+      // per image isn't worth it for a static archive.
+      center.querySelectorAll("img[srcset]").forEach((img) => img.removeAttribute("srcset"))
+      // Other [src] (audio/video/etc.) → absolutize to the live site rather
+      // than try to bundle non-image media.
+      center.querySelectorAll("[src]").forEach((el) => {
+        if (el.tagName === "IMG") return
+        const v = el.getAttribute("src")
+        if (!v || /^[a-z][a-z0-9+.-]*:/i.test(v)) return
+        try { el.setAttribute("src", new URL(v, baseUrl).href) } catch (e) {}
+      })
+
+      processed.push({ slug: page.slug, doc: page.doc, center, fromPath, imgTasks })
+    }
+
+    // 5. Fetch all unique images in parallel. \`null\` bytes signal failure
+    // (cross-origin shouldn't reach here — same-origin only — but a 404 or
+    // network error still lands here and falls back to the absolute URL).
+    const imageBytesByUrl = new Map()
+    await Promise.all(Array.from(imageTaskUrls).map(async (abs) => {
+      try {
+        const r = await fetch(abs)
+        imageBytesByUrl.set(abs, r.ok ? new Uint8Array(await r.arrayBuffer()) : null)
+      } catch (e) { imageBytesByUrl.set(abs, null) }
+    }))
+
+    // 6. Rewrite image src now that we know which fetches succeeded.
+    for (const p of processed) {
+      for (const t of p.imgTasks) {
+        const bytes = imageBytesByUrl.get(t.abs)
+        const local = imageLocalByUrl.get(t.abs)
+        t.img.setAttribute("src", (bytes && local) ? relZipPath(p.fromPath, local) : t.abs)
+      }
+    }
+
+    // 7. Build the zip: per-page HTML + bundled images.
+    const enc = new TextEncoder()
+    const entries = []
+    for (const p of processed) {
+      const titleEl = p.center.querySelector("h1, .article-title") || p.doc.querySelector("title")
+      const titleText = (titleEl && titleEl.textContent && titleEl.textContent.trim())
+        || p.slug || "page"
+      const html = buildStandaloneHtml(p.center, css, titleText)
+      entries.push({ name: p.fromPath, data: enc.encode(html) })
+    }
+    for (const [abs, bytes] of imageBytesByUrl) {
+      if (!bytes) continue
+      const local = imageLocalByUrl.get(abs)
+      if (local) entries.push({ name: local, data: bytes })
+    }
+
+    const rootTitleEl = document.querySelector(".center h1, .center .article-title")
+    const rootTitle = (rootTitleEl && rootTitleEl.textContent && rootTitleEl.textContent.trim())
+      || rootSlug || "folder"
+    triggerDownload(buildZip(entries), rootTitle, "zip")
+  }
+
   // ----- ZIP encoder (STORE mode only, hand-rolled) -------------------------
   // PKZIP format: per-file local headers, a central directory with one
   // entry per file, and an end-of-central-directory record. STORE means
@@ -1853,8 +2047,10 @@ document.addEventListener("nav", () => {
     const checked = getCheckedIndices()
     // Bail early on an explicit empty selection — exporting a notebook
     // with zero cells (or HTML with only the title) is almost certainly
-    // a misclick, and the silent-no-op result is confusing.
-    if (checked && checked.size === 0) {
+    // a misclick, and the silent-no-op result is confusing. Folder export
+    // ignores the section filter entirely (it spans many pages), so the
+    // bail wouldn't make sense there.
+    if (checked && checked.size === 0 && fmt !== "folder-zip") {
       alert("Select at least one section to export.")
       btn.innerHTML = orig
       btn.removeAttribute("disabled")
@@ -1872,6 +2068,7 @@ document.addEventListener("nav", () => {
       else if (fmt === "tex") await exportLatex(checked)
       else if (fmt === "json") await exportJson(checked)
       else if (fmt === "zip") await exportZip(checked)
+      else if (fmt === "folder-zip") await exportFolderZip()
     } finally {
       btn.innerHTML = orig
       btn.removeAttribute("disabled")
@@ -1897,7 +2094,17 @@ document.addEventListener("nav", () => {
 })
 `
 
-const ExportArticle: QuartzComponent = ({ fileData }: QuartzComponentProps) => {
+// `includeFolderExport` lights up the multi-page "Folder (HTML)" tile.
+// Off by default — only the list/folder layout passes it, since exporting
+// "this project" from a leaf note has ambiguous scope.
+interface ExportArticleOpts {
+  includeFolderExport?: boolean
+}
+
+function makeExportArticle(opts?: ExportArticleOpts): QuartzComponent {
+  const includeFolderExport = !!(opts && opts.includeFolderExport)
+
+  const ExportArticle: QuartzComponent = ({ fileData }: QuartzComponentProps) => {
   // Same gate EditInObsidian uses: tag/folder index pages have no backing
   // file — there's nothing meaningful to export from them.
   if (!fileData.filePath || !fileData.slug) return null
@@ -2004,14 +2211,29 @@ const ExportArticle: QuartzComponent = ({ fileData }: QuartzComponentProps) => {
               <span class="export-fmt-name">ZIP archive</span>
               <span class="export-fmt-ext">.zip</span>
             </button>
+            {includeFolderExport && (
+              <button
+                type="button"
+                role="menuitem"
+                data-fmt="folder-zip"
+                data-router-ignore="true"
+                title="This folder + every page beneath it, bundled as a multi-file HTML zip. Internal links are rewritten to relative paths so navigation works straight from disk."
+              >
+                <span class="export-fmt-name">Folder (HTML)</span>
+                <span class="export-fmt-ext">.zip</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
     </details>
   )
+  }
+
+  ExportArticle.afterDOMLoaded = exportScript
+  ExportArticle.css = style
+  return ExportArticle
 }
 
-ExportArticle.afterDOMLoaded = exportScript
-ExportArticle.css = style
-
-export default (() => ExportArticle) satisfies QuartzComponentConstructor
+export default ((opts?: ExportArticleOpts) =>
+  makeExportArticle(opts)) satisfies QuartzComponentConstructor
