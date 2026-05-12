@@ -28,7 +28,9 @@ Before doing any file work, verify Composio has active connections for both tool
 3. **Decide order:**
    - If a file named `index.md` exists at the folder root, it's the overview — comes first.
    - Otherwise, the alphabetically-first `.md` at the folder root is the overview.
+   - **If the folder root has no `.md` files at all** (pure subfolder-organized project), the overview is the alphabetically-first `.md` from the breadth-first sweep — i.e., the shallowest, alphabetically-first file anywhere in the tree. There is always an overview as long as the discovered set is non-empty.
    - Remaining files: breadth-first by directory depth, alphabetical within a depth.
+   - If the discovered set is empty (no `.md` files anywhere), bail with a clear error before any image/Docs work.
 4. **Cap.** If the discovered set exceeds 200 files or the combined raw markdown exceeds 500 KB, stop and report the size. Suggest exporting a subfolder instead. (The Docs API can handle more, but the user almost certainly doesn't want a 200-file doc, and a hard cap prevents accidental "export my whole vault" disasters.)
 
 ## Phase 3: Image discovery and resolution
