@@ -24,7 +24,7 @@ Before doing any file work, verify Composio has active connections for both tool
 ## Phase 2: File discovery
 
 1. **Validate folder.** Reject if it doesn't exist or isn't a directory.
-2. **Glob `**/*.md`** under the folder. Skip any path that matches the vault's typical ignored set (`.obsidian/`, `templates/`, `private/`, files starting with `Untitled`) — these mirror what `quartz.config.ts` ignores so the export reflects what the user actually publishes.
+2. **Glob `**/*.md`** under the folder. Skip any path that matches the vault's ignored set: `private/`, `templates/`, `.obsidian/`, `.trash/`, `attachments/`, and files starting with `Untitled`. This is the same list `quartz-overlay/quartz.config.ts` line 21 uses, so the export reflects what the user actually publishes. Keep the two in sync — drift here means deleted drafts (`.trash/`) or attachment-side markdown can land in the doc even though they're suppressed on the live site.
 3. **Decide order:**
    - If a file named `index.md` exists at the folder root, it's the overview — comes first.
    - Otherwise, the alphabetically-first `.md` at the folder root is the overview.
