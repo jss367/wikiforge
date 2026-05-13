@@ -92,7 +92,9 @@ document.addEventListener("nav", () => {
       '<style>' + css + '\\n' +
       '.sidebar,.header,.breadcrumb-container,.export-article,.edit-in-obsidian{display:none!important}' +
       'body{margin:0;padding:2rem 1rem}' +
-      '.page,.center{max-width:750px;margin:0 auto}' +
+      // Sidebars are hidden in the export, so the Quartz 750px column would leave
+      // huge empty margins. Widen it for the standalone document.
+      '.page,.center{max-width:1100px;margin:0 auto}' +
       (extraStyle || "") +
       '</style></head><body><div id="quartz-root"><div id="quartz-body">' +
       '<div class="page">' +
