@@ -6,10 +6,8 @@ import { pageResources, renderPage } from "../../components/renderPage"
 import { ProcessedContent, QuartzPluginData, defaultProcessedContent } from "../vfile"
 import { FullPageLayout } from "../../cfg"
 import path from "path"
-import fs from "fs"
 import {
   FullSlug,
-  FilePath,
   SimpleSlug,
   stripSlashes,
   joinSegments,
@@ -23,63 +21,13 @@ import { write } from "./helpers"
 import { i18n, TRANSLATIONS } from "../../i18n"
 import { BuildCtx, trieFromAllFiles } from "../../util/ctx"
 import { StaticResources } from "../../util/resources"
-import { glob } from "../../util/glob"
+import { DEFAULT_ASSET_EXTENSIONS, findAssetFiles } from "../../util/assetFiles"
 
 interface FolderPageOptions extends FullPageLayout {
   sort?: (f1: QuartzPluginData, f2: QuartzPluginData) => number
-  // Non-markdown extensions to surface in folder listings. Defaults to PDFs.
-  // Each entry includes the leading dot. Set to [] to disable.
+  // Non-markdown extensions to surface in folder listings. Each entry includes
+  // the leading dot. Set to [] to disable.
   assetExtensions: string[]
-}
-
-const DEFAULT_ASSET_EXTENSIONS = [".pdf"]
-
-async function findAssetFiles(
-  ctx: BuildCtx,
-  exts: string[],
-): Promise<QuartzPluginData[]> {
-  if (exts.length === 0) return []
-  const cfg = ctx.cfg.configuration
-  const seen = new Set<string>()
-  const fps: FilePath[] = []
-  for (const rawExt of exts) {
-    const ext = rawExt.startsWith(".") ? rawExt : "." + rawExt
-    const matches = await glob(`**/*${ext}`, ctx.argv.directory, cfg.ignorePatterns)
-    for (const m of matches) {
-      if (!seen.has(m)) {
-        seen.add(m)
-        fps.push(m)
-      }
-    }
-  }
-
-  return fps.map((rel) => {
-    const slug = slugifyFilePath(rel)
-    const abs = path.join(ctx.argv.directory, rel)
-    let createdMs = Date.now()
-    let modifiedMs = Date.now()
-    try {
-      const stat = fs.statSync(abs)
-      createdMs = stat.birthtimeMs || stat.ctimeMs
-      modifiedMs = stat.mtimeMs
-    } catch {
-      // best-effort: fall through to "now"
-    }
-    return {
-      slug,
-      filePath: rel,
-      relativePath: rel,
-      frontmatter: {
-        title: path.basename(rel),
-        tags: [],
-      },
-      dates: {
-        created: new Date(createdMs),
-        modified: new Date(modifiedMs),
-        published: new Date(createdMs),
-      },
-    } as QuartzPluginData
-  })
 }
 
 async function* processFolderInfo(
