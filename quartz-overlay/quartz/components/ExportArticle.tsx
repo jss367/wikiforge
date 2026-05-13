@@ -1159,10 +1159,18 @@ document.addEventListener("nav", () => {
     // \`@page\` hints the print dialog at sensible margins; \`color-adjust:
     // exact\` keeps code-block backgrounds and callout fills from being
     // washed out under the browser's default print colour adjustment.
+    // The standalone wrapper caps .page/.center to a screen-friendly width
+    // (~1100px). On a printed page that cap is wider than the printable
+    // area, so the right edge gets clipped. Drop the cap and clear body
+    // padding for print so the content reflows to the @page margins.
     const printStyle =
       "@media print { @page { margin: 1.6cm; } " +
       "html, body { background: white !important; } " +
+      "body { padding: 0 !important; } " +
+      ".page, .center { max-width: none !important; margin: 0 !important; } " +
       "* { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } " +
+      "pre, code { white-space: pre-wrap !important; word-break: break-word !important; } " +
+      "img, table, pre { max-width: 100% !important; } " +
       "}"
     const html = buildStandaloneHtml(clone, css, titleText, printStyle)
 
