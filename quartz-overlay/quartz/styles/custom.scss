@@ -75,6 +75,28 @@ pre > code {
   }
 }
 
+// The layout has no right sidebar (see quartz.layout.ts: right=[]), but
+// Quartz's base grid still reserves a 320px column for it. Collapse the
+// desktop grid to two columns so the article reclaims that empty strip.
+// Matches the upstream desktop breakpoint (1200px) so tablet/mobile layouts
+// in base.scss keep their stock 2-col / 1-col arrangements.
+@media (min-width: 1200px) {
+  .page {
+    // Quartz's base caps .page at 1500px. With no right sidebar we can let
+    // the article breathe on wider monitors — capped at 95vw so there's
+    // still a small breathing margin on ultra-wide displays.
+    max-width: min(1800px, 95vw);
+  }
+
+  .page > #quartz-body {
+    grid-template-columns: 320px auto;
+    grid-template-areas:
+      "grid-sidebar-left grid-header"
+      "grid-sidebar-left grid-center"
+      "grid-sidebar-left grid-footer";
+  }
+}
+
 // Wikipedia-style "wikitable": thin 1px gray borders on cells and headers, a
 // lightly-filled header row, modest padding, and left alignment. Scoped to
 // the article content area so tables in sidebars/chrome keep their stock
@@ -86,6 +108,12 @@ pre > code {
     margin: 0.5em 0 1em 0;
     // Sit flush left rather than centered, matching Wikipedia's layout.
     margin-right: auto;
+    // Wide tables (e.g. eval comparison grids) used to push the layout and
+    // force horizontal page scroll. `display: block` + `overflow-x: auto`
+    // keeps any too-wide table scrolling inside the article column instead.
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
   }
 
   th,
