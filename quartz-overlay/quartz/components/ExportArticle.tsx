@@ -92,9 +92,14 @@ document.addEventListener("nav", () => {
       '<style>' + css + '\\n' +
       '.sidebar,.header,.breadcrumb-container,.export-article,.edit-in-obsidian{display:none!important}' +
       'body{margin:0;padding:2rem 1rem}' +
-      // Sidebars are hidden in the export, so the Quartz 750px column would leave
-      // huge empty margins. Widen it for the standalone document.
-      '.page,.center{max-width:1100px;margin:0 auto}' +
+      // Quartz's #quartz-body is a 3-column grid (320px sidebar / auto / 320px
+      // sidebar). Hiding the sidebars with display:none leaves the grid tracks
+      // in place, so the center column was squeezed in the middle of the page
+      // with ~320px of empty space on either side. Collapse the grid in the
+      // export so the content claims the full width.
+      '#quartz-body{display:block!important;grid-template-columns:none!important}' +
+      '.page{max-width:1100px;margin:0 auto}' +
+      '.center{max-width:100%;margin:0}' +
       (extraStyle || "") +
       '</style></head><body><div id="quartz-root"><div id="quartz-body">' +
       '<div class="page">' +
@@ -1159,10 +1164,20 @@ document.addEventListener("nav", () => {
     // \`@page\` hints the print dialog at sensible margins; \`color-adjust:
     // exact\` keeps code-block backgrounds and callout fills from being
     // washed out under the browser's default print colour adjustment.
+    // The shared standalone wrapper caps .page at ~1100px for screen
+    // display, but the printable area on US Letter / A4 with 1.6cm margins
+    // is narrower than that, so the right edge of the content was getting
+    // clipped. Drop the cap and clear body padding in @media print so the
+    // content reflows to the @page margins; wrap long pre/code lines and
+    // cap images/tables so nothing pushes the page wider than the sheet.
     const printStyle =
       "@media print { @page { margin: 1.6cm; } " +
       "html, body { background: white !important; } " +
+      "body { padding: 0 !important; } " +
+      ".page { max-width: none !important; margin: 0 !important; } " +
       "* { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } " +
+      "pre, code { white-space: pre-wrap !important; word-break: break-word !important; } " +
+      "img, table, pre { max-width: 100% !important; } " +
       "}"
     const html = buildStandaloneHtml(clone, css, titleText, printStyle)
 
