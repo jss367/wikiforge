@@ -93,8 +93,7 @@ pre > code {
       "grid-sidebar-left grid-footer grid-sidebar-right";
   }
 
-  :root[saved-right-panel="hidden"] .page > #quartz-body,
-  .page > #quartz-body:has(> .sidebar.right:empty) {
+  :root[saved-right-panel="hidden"] .page > #quartz-body {
     grid-template-columns: 320px minmax(0, 1fr);
     grid-template-areas:
       "grid-sidebar-left grid-header"
@@ -102,9 +101,22 @@ pre > code {
       "grid-sidebar-left grid-footer";
   }
 
-  :root[saved-right-panel="hidden"] .page > #quartz-body .sidebar.right,
-  .page > #quartz-body:has(> .sidebar.right:empty) .sidebar.right {
+  :root[saved-right-panel="hidden"] .page > #quartz-body .sidebar.right {
     display: none;
+  }
+
+  @supports selector(:has(*)) {
+    .page > #quartz-body:has(> .sidebar.right:empty) {
+      grid-template-columns: 320px minmax(0, 1fr);
+      grid-template-areas:
+        "grid-sidebar-left grid-header"
+        "grid-sidebar-left grid-center"
+        "grid-sidebar-left grid-footer";
+    }
+
+    .page > #quartz-body:has(> .sidebar.right:empty) .sidebar.right {
+      display: none;
+    }
   }
 }
 
