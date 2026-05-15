@@ -40,6 +40,7 @@ document.addEventListener("nav", () => {
 
   for (const button of document.getElementsByClassName("right-panel-toggle")) {
     button.addEventListener("click", toggleRightPanel)
-    window.addCleanup(() => button.removeEventListener("click", toggleRightPanel))
+    window.addCleanup &&
+      window.addCleanup(() => button.removeEventListener("click", toggleRightPanel))
   }
 })
