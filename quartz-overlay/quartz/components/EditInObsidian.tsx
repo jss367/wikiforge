@@ -1,4 +1,4 @@
-import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
+import { QuartzComponentConstructor, QuartzComponentProps } from "./types"
 
 interface EditInObsidianOptions {
   vaultName: string
@@ -14,11 +14,7 @@ const defaultOptions: EditInObsidianOptions = {
 // vault (e.g. `-d $VAULT/wiki` or `-d $VAULT/compiled`), `relativePath` omits
 // that subfolder prefix — reconstruct it from `filePath - relativePath`.
 // Separators are normalized so Windows paths parse the same as POSIX.
-function vaultRootRelative(
-  filePath: string,
-  relativePath: string,
-  vaultName: string,
-): string {
+function vaultRootRelative(filePath: string, relativePath: string, vaultName: string): string {
   const normalizedFilePath = filePath.replace(/\\/g, "/")
   const normalizedRelativePath = relativePath.replace(/\\/g, "/")
   const contentDir = normalizedFilePath.slice(

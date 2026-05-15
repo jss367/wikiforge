@@ -75,25 +75,36 @@ pre > code {
   }
 }
 
-// The layout has no right sidebar (see quartz.layout.ts: right=[]), but
-// Quartz's base grid still reserves a 320px column for it. Collapse the
-// desktop grid to two columns so the article reclaims that empty strip.
-// Matches the upstream desktop breakpoint (1200px) so tablet/mobile layouts
-// in base.scss keep their stock 2-col / 1-col arrangements.
+// The right sidebar hosts the page table of contents. A toolbar toggle can
+// hide it for wide tables or other content that needs the extra horizontal
+// space, restoring the previous two-column article layout.
 @media (min-width: 1200px) {
   .page {
-    // Quartz's base caps .page at 1500px. With no right sidebar we can let
-    // the article breathe on wider monitors — capped at 95vw so there's
-    // still a small breathing margin on ultra-wide displays.
+    // Quartz's base caps .page at 1500px. This keeps a little more breathing
+    // room for the article and TOC on wide monitors.
     max-width: min(1800px, 95vw);
   }
 
   .page > #quartz-body {
-    grid-template-columns: 320px auto;
+    grid-template-columns: 320px minmax(0, 1fr) 320px;
+    grid-template-areas:
+      "grid-sidebar-left grid-header grid-sidebar-right"
+      "grid-sidebar-left grid-center grid-sidebar-right"
+      "grid-sidebar-left grid-footer grid-sidebar-right";
+  }
+
+  :root[saved-right-panel="hidden"] .page > #quartz-body,
+  .page > #quartz-body:has(> .sidebar.right:empty) {
+    grid-template-columns: 320px minmax(0, 1fr);
     grid-template-areas:
       "grid-sidebar-left grid-header"
       "grid-sidebar-left grid-center"
       "grid-sidebar-left grid-footer";
+  }
+
+  :root[saved-right-panel="hidden"] .page > #quartz-body .sidebar.right,
+  .page > #quartz-body:has(> .sidebar.right:empty) .sidebar.right {
+    display: none;
   }
 }
 
