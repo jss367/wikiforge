@@ -52,10 +52,9 @@ export const StripDuplicateTitle: QuartzTransformerPlugin = () => ({
         // FrontMatter plugin leaves in the tree (`yaml`, `toml`) — those
         // don't render, so the H1 that follows them is still "first".
         let idx = 0
-        while (
-          idx < tree.children.length &&
-          (tree.children[idx].type === "yaml" || tree.children[idx].type === "toml")
-        ) {
+        while (idx < tree.children.length) {
+          const childType = tree.children[idx].type as string
+          if (childType !== "yaml" && childType !== "toml") break
           idx++
         }
         const first = tree.children[idx]

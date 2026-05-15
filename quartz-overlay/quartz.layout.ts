@@ -3,6 +3,9 @@ import * as Component from "./quartz/components"
 import EditInObsidian from "./quartz/components/EditInObsidian"
 import ExportArticle from "./quartz/components/ExportArticle"
 import LastEdited from "./quartz/components/LastEdited"
+import RightPanelToggle from "./quartz/components/RightPanelToggle"
+
+type WikiforgePageLayout = PageLayout & Pick<SharedLayout, "afterBody">
 
 // Title-cases Explorer node display names. Inlined because Quartz serializes
 // this with .toString() and runs it in the browser — it cannot close over
@@ -32,7 +35,7 @@ export const sharedPageComponents: SharedLayout = {
 }
 
 // components for pages that display a single page (e.g. a single note)
-export const defaultContentPageLayout: PageLayout = {
+export const defaultContentPageLayout: WikiforgePageLayout = {
   beforeBody: [
     // ExportArticle is first so its `float: right` lands at the top-right
     // of the content column; the breadcrumbs/title below wrap around it.
@@ -58,14 +61,12 @@ export const defaultContentPageLayout: PageLayout = {
         },
         { Component: Component.Darkmode() },
         { Component: Component.ReaderMode() },
+        { Component: RightPanelToggle() },
       ],
     }),
     Component.Explorer({ mapFn: titleCaseExplorer }),
   ],
-  // Wikipedia-style: no right sidebar. TOC and backlinks removed for a
-  // simpler article-centric layout. If you miss the graph/backlinks, move
-  // them to `left:` or restore selective components here.
-  right: [],
+  right: [Component.TableOfContents()],
 }
 
 // components for pages that display lists of pages  (e.g. tags or folders)
@@ -75,7 +76,7 @@ export const defaultContentPageLayout: PageLayout = {
 // render here, not in defaultContentPageLayout. EditInObsidian is included
 // to cover that case; on tag/folder index pages without a `source`
 // frontmatter field, the component returns null and renders nothing.
-export const defaultListPageLayout: PageLayout = {
+export const defaultListPageLayout: WikiforgePageLayout = {
   beforeBody: [
     // Folder/list pages get the extra "Folder (HTML)" tile: from a folder
     // index page, "this project" maps unambiguously to "this folder +
@@ -97,9 +98,10 @@ export const defaultListPageLayout: PageLayout = {
           grow: true,
         },
         { Component: Component.Darkmode() },
+        { Component: RightPanelToggle() },
       ],
     }),
     Component.Explorer({ mapFn: titleCaseExplorer }),
   ],
-  right: [],
+  right: [Component.TableOfContents()],
 }
